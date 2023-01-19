@@ -3,11 +3,11 @@ package main
 import (
 	"fmt"
 
-	"sql_generator"
+	generator "github.com/mstgnz/golang-sql-generator"
 )
 
 var (
-	s   sql_generator.Sql
+	s   generator.Sql
 	sql string
 )
 

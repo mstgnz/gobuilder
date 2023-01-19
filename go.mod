@@ -1,4 +1,4 @@
-module sql_generator
+module github.com/mstgnz/golang-sql-generator
 
 go 1.18
 
