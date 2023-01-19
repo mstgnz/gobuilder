@@ -1,4 +1,4 @@
-package main
+package sql_generator
 
 import (
 	"fmt"
@@ -138,7 +138,7 @@ func (s *Sql) OrderBy(column, sortName string) *Sql {
 }
 
 func (s *Sql) Union(sql string) *Sql {
-	s.sql = s.sql +" UNION "+ sql
+	s.sql = s.sql + " UNION " + sql
 	return s
 }
 

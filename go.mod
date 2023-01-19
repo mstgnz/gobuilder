@@ -1,4 +1,4 @@
-module go-sql-generator
+module sql_generator
 
 go 1.18
 

@@ -1,4 +1,4 @@
-package main
+package sql_generator
 
 import (
 	"reflect"
@@ -8,6 +8,7 @@ import (
 var (
 	got      string
 	expected string
+	s        Sql
 )
 
 func TestSql_Select(t *testing.T) {
@@ -202,7 +203,7 @@ func TestSql_Order(t *testing.T) {
 
 func TestSql_Union(t *testing.T) {
 	s.sql = ""
-	expected = " select * from companies"
+	expected = " UNION select * from companies"
 	got = s.Union("select * from companies").Get()
 	if !reflect.DeepEqual(expected, got) {
 		t.Errorf("expected = %v, got %v", expected, got)
