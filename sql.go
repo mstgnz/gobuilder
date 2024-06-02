@@ -1,4 +1,4 @@
-package sql_generator
+package gobuilder
 
 import (
 	"fmt"
@@ -7,19 +7,19 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-type Sql struct {
+type GoBuilder struct {
 	sql string
 }
 
-func (s *Sql) Select(table string, columns []string) *Sql {
+func (gb *GoBuilder) Select(table string, columns ...string) *GoBuilder {
 	if len(columns) == 0 {
 		columns = append(columns, "*")
 	}
-	s.sql = fmt.Sprintf("SELECT %v FROM %v", strings.Join(columns, ","), table)
-	return s
+	gb.sql = fmt.Sprintf("SELECT %v FROM %v", strings.Join(columns, ","), table)
+	return gb
 }
 
-func (s *Sql) Insert(table string, args map[string]string) *Sql {
+func (gb *GoBuilder) Insert(table string, args map[string]string) *GoBuilder {
 	if len(args) != 0 {
 		keys := maps.Keys(args)
 		values := ""
@@ -27,121 +27,125 @@ func (s *Sql) Insert(table string, args map[string]string) *Sql {
 			values += fmt.Sprintf("'%v',", v)
 		}
 		values = strings.Trim(values, ",")
-		s.sql = fmt.Sprintf("INSERT INTO %v (%v) VALUES (%v)", table, strings.Join(keys, ","), values)
+		gb.sql = fmt.Sprintf("INSERT INTO %v (%v) VALUES (%v)", table, strings.Join(keys, ","), values)
 	}
-	return s
+	return gb
 }
 
-func (s *Sql) Update(table string, args map[string]string) *Sql {
+func (gb *GoBuilder) Update(table string, args map[string]string) *GoBuilder {
 	if len(args) != 0 {
 		set := ""
 		for _, key := range maps.Keys(args) {
 			set += fmt.Sprintf("%v='%v', ", key, args[key])
 		}
 		set = strings.Trim(set, ", ")
-		s.sql = fmt.Sprintf("UPDATE %v SET %v", table, set)
+		gb.sql = fmt.Sprintf("UPDATE %v SET %v", table, set)
 	}
-	return s
+	return gb
 }
 
-func (s *Sql) Delete(table string) *Sql {
-	s.sql = fmt.Sprintf("DELETE FROM %v", table)
-	return s
+func (gb *GoBuilder) Delete(table string) *GoBuilder {
+	gb.sql = fmt.Sprintf("DELETE FROM %v", table)
+	return gb
 }
 
-func (s *Sql) Where(key, opt, val string) *Sql {
-	if strings.Contains(s.sql, "WHERE") {
-		s.sql = fmt.Sprintf("%v AND %v%v'%v'", s.sql, key, opt, val)
+func (gb *GoBuilder) Where(key, opt, val string) *GoBuilder {
+	if strings.Contains(gb.sql, "WHERE") {
+		gb.sql = fmt.Sprintf("%v AND %v%v'%v'", gb.sql, key, opt, val)
 	} else {
-		s.sql = fmt.Sprintf("%v WHERE %v%v'%v'", s.sql, key, opt, val)
+		gb.sql = fmt.Sprintf("%v WHERE %v%v'%v'", gb.sql, key, opt, val)
 	}
-	return s
+	return gb
 }
 
-func (s *Sql) OrWhere(key, opt, val string) *Sql {
-	if strings.Contains(s.sql, "WHERE") {
-		s.sql = fmt.Sprintf("%v OR %v%v'%v'", s.sql, key, opt, val)
+func (gb *GoBuilder) OrWhere(key, opt, val string) *GoBuilder {
+	if strings.Contains(gb.sql, "WHERE") {
+		gb.sql = fmt.Sprintf("%v OR %v%v'%v'", gb.sql, key, opt, val)
 	} else {
-		s.sql = fmt.Sprintf("%v WHERE %v%v'%v'", s.sql, key, opt, val)
+		gb.sql = fmt.Sprintf("%v WHERE %v%v'%v'", gb.sql, key, opt, val)
 	}
-	return s
+	return gb
 }
 
-func (s *Sql) In(column string, args []string) *Sql {
+func (gb *GoBuilder) In(column string, args ...string) *GoBuilder {
 	if len(args) > 0 {
 		var values string
 		for _, v := range args {
 			values += fmt.Sprintf("'%v', ", v)
 		}
 		values = fmt.Sprintf("(%v)", strings.Trim(values, ", "))
-		if strings.Contains(s.sql, "WHERE") {
-			s.sql = fmt.Sprintf("%v AND %v", s.sql, values)
+		if strings.Contains(gb.sql, "WHERE") {
+			gb.sql = fmt.Sprintf("%v AND %v", gb.sql, values)
 		} else {
-			s.sql = fmt.Sprintf("%v WHERE %v IN %v", s.sql, column, values)
+			gb.sql = fmt.Sprintf("%v WHERE %v IN %v", gb.sql, column, values)
 		}
 	}
-	return s
+	return gb
 }
 
-func (s *Sql) OrIn(column string, args []string) *Sql {
+func (gb *GoBuilder) OrIn(column string, args ...string) *GoBuilder {
 	if len(args) > 0 {
 		var values string
 		for _, v := range args {
 			values += fmt.Sprintf("'%v', ", v)
 		}
 		values = fmt.Sprintf("(%v)", strings.Trim(values, ", "))
-		if strings.Contains(s.sql, "WHERE") {
-			s.sql = fmt.Sprintf("%v OR %v", s.sql, values)
+		if strings.Contains(gb.sql, "WHERE") {
+			gb.sql = fmt.Sprintf("%v OR %v", gb.sql, values)
 		} else {
-			s.sql = fmt.Sprintf("%v WHERE %v IN %v", s.sql, column, values)
+			gb.sql = fmt.Sprintf("%v WHERE %v IN %v", gb.sql, column, values)
 		}
 	}
-	return s
+	return gb
 }
 
-func (s *Sql) Between(column, val1, val2 string) *Sql {
-	if strings.Contains(s.sql, "WHERE") {
-		s.sql = fmt.Sprintf("%v AND %v BETWEEN '%v' AND '%v'", s.sql, column, val1, val2)
-	} else {
-		s.sql = fmt.Sprintf("%v WHERE %v BETWEEN '%v' AND '%v'", s.sql, column, val1, val2)
+func (gb *GoBuilder) Between(column string, vals ...string) *GoBuilder {
+	if len(vals) == 2 {
+		if strings.Contains(gb.sql, "WHERE") {
+			gb.sql = fmt.Sprintf("%v AND %v BETWEEN '%v' AND '%v'", gb.sql, column, vals[0], vals[1])
+		} else {
+			gb.sql = fmt.Sprintf("%v WHERE %v BETWEEN '%v' AND '%v'", gb.sql, column, vals[0], vals[1])
+		}
 	}
-	return s
+	return gb
 }
 
-func (s *Sql) OrBetween(column, val1, val2 string) *Sql {
-	if strings.Contains(s.sql, "WHERE") {
-		s.sql = fmt.Sprintf("%v OR %v BETWEEN '%v' AND '%v'", s.sql, column, val1, val2)
-	} else {
-		s.sql = fmt.Sprintf("%v WHERE %v BETWEEN '%v' AND '%v'", s.sql, column, val1, val2)
+func (gb *GoBuilder) OrBetween(column string, vals ...string) *GoBuilder {
+	if len(vals) == 2 {
+		if strings.Contains(gb.sql, "WHERE") {
+			gb.sql = fmt.Sprintf("%v OR %v BETWEEN '%v' AND '%v'", gb.sql, column, vals[0], vals[1])
+		} else {
+			gb.sql = fmt.Sprintf("%v WHERE %v BETWEEN '%v' AND '%v'", gb.sql, column, vals[0], vals[1])
+		}
 	}
-	return s
+	return gb
 }
 
-func (s *Sql) Join(joinName, table, equal string) *Sql {
-	s.sql = fmt.Sprintf("%v %v JOIN %v ON %v", s.sql, joinName, table, equal)
-	return s
+func (gb *GoBuilder) Join(joinName, table, equal string) *GoBuilder {
+	gb.sql = fmt.Sprintf("%v %v JOIN %v ON %v", gb.sql, joinName, table, equal)
+	return gb
 }
 
-func (s *Sql) Limit(start, limit int) *Sql {
-	s.sql = fmt.Sprintf("%v LIMIT %v,%v", s.sql, start, limit)
-	return s
+func (gb *GoBuilder) Limit(start, limit int) *GoBuilder {
+	gb.sql = fmt.Sprintf("%v LIMIT %v,%v", gb.sql, start, limit)
+	return gb
 }
 
-func (s *Sql) GroupBy(column string) *Sql {
-	s.sql = fmt.Sprintf("%v GROUP BY %v", s.sql, column)
-	return s
+func (gb *GoBuilder) GroupBy(column string) *GoBuilder {
+	gb.sql = fmt.Sprintf("%v GROUP BY %v", gb.sql, column)
+	return gb
 }
 
-func (s *Sql) OrderBy(column, sortName string) *Sql {
-	s.sql = fmt.Sprintf("%v ORDER BY %v %v", s.sql, column, sortName)
-	return s
+func (gb *GoBuilder) OrderBy(column, sortName string) *GoBuilder {
+	gb.sql = fmt.Sprintf("%v ORDER BY %v %v", gb.sql, column, sortName)
+	return gb
 }
 
-func (s *Sql) Union(sql string) *Sql {
-	s.sql = s.sql + " UNION " + sql
-	return s
+func (gb *GoBuilder) Union(sql string) *GoBuilder {
+	gb.sql = gb.sql + " UNION " + sql
+	return gb
 }
 
-func (s *Sql) Get() string {
-	return s.sql
+func (gb *GoBuilder) Sql() string {
+	return gb.sql
 }

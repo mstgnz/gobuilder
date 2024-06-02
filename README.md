@@ -1,17 +1,23 @@
-# Golang Sql Generator
+# Golang Query Builder
 This package is only for creating sql text. To run the created sql text, you must create a database connection. (Ex: mysql, postgresql).
 
 # Examples
 
 ## Select
 ```go
+import "github.com/mstgnz/gobuilder"
+
+var gb GoBuilder
+```
+
+```go
 // all columns
-s.Select("users", nil).Where("id","=","1").
-	Get()
+gb.Select("users").Where("id","=","1").Sql()
+
 // filter columns
-s.Select("users", []string{"firstname", "lastname", "create_date"}).
+gb.Select("users", "firstname", "lastname", "create_date").
     Where("id", "=", "1").
-    Get()
+    Sql()
 ```
 ```sql
 Result: SELECT * FROM users WHERE id = '1'
@@ -19,72 +25,72 @@ Result: SELECT firstname,lastname,create_date FROM users WHERE id = '1'
 ```
 ### where orWhere
 ```go
-s.Select("users", nil).
+gb.Select("users").
     Where("id", "=", "1").
     OrWhere("email", "=", "loremipsum@lrmpsm.com").
-    Get()
+    Sql()
 ```
 ```sql
 Result: SELECT * FROM users WHERE id='1' OR email='loremipsum@lrmpsm.com'
 ```
 ### join
 ```go
-s.Select("users as u", []string{"u.firstname", "u.lastname", "a.address"}).
+gb.Select("users as u", "u.firstname", "u.lastname", "a.address").
     Join("INNER", "address as a", "a.user_id=u.id").
     Where("u.email", "=", "loremipsum@lrmpsm.com").
-    Get()
+    Sql()
 ```
 ```sql
 Result: SELECT u.firstname,u.lastname,a.address FROM users as u INNER JOIN address as a ON a.user_id=u.id WHERE u.email='loremipsum@lrmpsm.com'
 ```
 ### between
 ```go
-s.Select("users", nil).
+gb.Select("users").
 	Where("id", "=", "1").
 	Between("create_date", "2021-01-01", "2021-03-16").
-	Get()
+	Sql()
 ```
 ```sql
 Result: SELECT * FROM users WHERE id='1' AND create_date BETWEEN '2021-01-01' AND '2021-03-16'
 ```
 ### limit
 ```go
-s.Select("users", nil).
+gb.Select("users").
     Where("id", "=", "1").
     Between("create_date", "2021-01-01", "2021-03-16").
     Limit(1, 5).
-    Get()
+    Sql()
 ```
 ```sql
 Result: SELECT * FROM users WHERE id='1' AND create_date BETWEEN '2021-01-01' AND '2021-03-16' LIMIT 1,5
 ```
 ### group by
 ```go
-s.Select("users", nil).
+gb.Select("users").
 	Where("id", "=", "1").
 	Between("create_date", "2021-01-01", "2021-03-16").
 	GroupBy("lastname").
-	Get()
+	Sql()
 ```
 ```sql
 Result: SELECT * FROM users WHERE id='1' AND create_date BETWEEN '2021-01-01' AND '2021-03-16' GROUP BY lastname
 ```
 ### order by
 ```go
-s.Select("users", nil).
+gb.Select("users").
 	Where("id", "=", "1").
 	Between("create_date", "2021-01-01", "2021-03-16").
 	GroupBy("lastname").
 	OrderBy("id", "DESC").
-	Get()
+	Sql()
 ```
 ```sql
 Result: SELECT * FROM users WHERE id='1' AND create_date BETWEEN '2021-01-01' AND '2021-03-16' GROUP BY lastname ORDER BY id DESC
 ```
 ### union
 ```go
-s1 := s.Select("users", nil).Where("lastname", "=", "lorem").Get()
-s2  := s.Select("users", nil).Where("lastname", "=", "ipsum").Union(s1).Get()
+s1 := gb.Select("users").Where("lastname", "=", "lorem").Sql()
+s2 := gb.Select("users").Where("lastname", "=", "ipsum").Union(s1).Sql()
 ```
 ```sql
 Result: SELECT * FROM users WHERE lastname='ipsum' UNION SELECT * FROM users WHERE lastname='lorem'
@@ -96,7 +102,7 @@ args := map[string]string{
 "firstname": "Lorem",
 "lastname":  "IPSUM",
 }
-sql = s.Insert("users", args).Get()
+gb.Insert("users", args).Sql()
 ```
 ```sql
 Result : INSERT INTO users (lastname,firstname) VALUES ('Lorem','IPSUM')
@@ -108,7 +114,7 @@ args := map[string]string{
 "firstname": "Lorem",
 "lastname":  "IPSUM",
 }
-sql = s.Update("users", args).Where("email", "=", "loremipsum@lrmpsm.com").Get()
+gb.Update("users", args).Where("email", "=", "loremipsum@lrmpsm.com").Sql()
 ```
 ```sql
 Result: UPDATE users SET firstname='Lorem', lastname='IPSUM' WHERE email='loremipsum@lrmpsm.com'
@@ -116,7 +122,7 @@ Result: UPDATE users SET firstname='Lorem', lastname='IPSUM' WHERE email='loremi
 
 ## Delete
 ```go
-s.Delete("users").Where("email", "=", "loremipsum@lrmpsm.com").Get()
+gb.Delete("users").Where("email", "=", "loremipsum@lrmpsm.com").Sql()
 ```
 ```sql
 Result: DELETE FROM users WHERE email='loremipsum@lrmpsm.com'
