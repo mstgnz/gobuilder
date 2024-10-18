@@ -13,64 +13,64 @@ var (
 
 func main() {
 
-	sql = gb.Select("users").Where("id", "=", "1").ToSql()
-	fmt.Printf("All Columns: \n%s\n", sql)
+	sql = gb.Table("users").Select().Where("id", "=", "1").ToSql()
+	fmt.Printf("All Columns: \n%s\n\n", sql)
 
-	sql = gb.Select("users", "firstname", "lastname", "create_date").
-		Where("id", "=", "1").
+	sql = gb.Table("users").Select("firstname", "lastname", "created_at").
+		Where("id", "=", 1).
 		ToSql()
-	fmt.Printf("Filter Columns: \n%s\n", sql)
+	fmt.Printf("Filter Columns: \n%s\n\n", sql)
 
-	sql = gb.Select("users").
+	sql = gb.Table("users").Select().
 		Where("id", "=", "1").
 		OrWhere("email", "=", "loremipsum@lrmpsm.com").
 		ToSql()
-	fmt.Printf("Where Or Where: \n%s\n", sql)
+	fmt.Printf("Where Or Where: \n%s\n\n", sql)
 
-	sql = gb.Select("users as u", "u.firstname", "u.lastname", "a.address").
+	sql = gb.Table("users as u").Select("u.firstname", "u.lastname", "a.address").
 		Join("INNER", "address as a", "a.user_id=u.id").
 		Where("u.email", "=", "loremipsum@lrmpsm.com").
 		ToSql()
-	fmt.Printf("Join: \n%s\n", sql)
+	fmt.Printf("Join: \n%s\n\n", sql)
 
-	sql = gb.Select("users").
+	sql = gb.Table("users").Select().
 		Where("id", "=", "1").
-		Between("create_date", "2021-01-01", "2021-03-16").
+		Between("created_at", "2021-01-01", "2021-03-16").
 		ToSql()
-	fmt.Printf("Between: \n%s\n", sql)
+	fmt.Printf("Between: \n%s\n\n", sql)
 
-	sql = gb.Select("users").
+	sql = gb.Table("users").Select().
 		Where("id", "=", "1").
-		Between("create_date", "2021-01-01", "2021-03-16").
+		Between("created_at", "2021-01-01", "2021-03-16").
 		Limit(1, 5).
 		ToSql()
-	fmt.Printf("Limit: \n%s\n", sql)
+	fmt.Printf("Limit: \n%s\n\n", sql)
 
-	sql = gb.Select("users").
+	sql = gb.Table("users").Select().
 		Where("id", "=", "1").
-		Between("create_date", "2021-01-01", "2021-03-16").
+		Between("created_at", "2021-01-01", "2021-03-16").
 		GroupBy("lastname").
 		ToSql()
-	fmt.Printf("Group By: \n%s\n", sql)
+	fmt.Printf("Group By: \n%s\n\n", sql)
 
-	sql = gb.Select("users").
+	sql = gb.Table("users").Select().
 		Where("id", "=", "1").
-		Between("create_date", "2021-01-01", "2021-03-16").
+		Between("created_at", "2021-01-01", "2021-03-16").
 		GroupBy("lastname").
 		OrderBy("id").
 		ToSql()
-	fmt.Printf("Order By: \n%s\n", sql)
+	fmt.Printf("Order By: \n%s\n\n", sql)
 
-	sql = gb.Select("users").Where("lastname", "=", "lorem").ToSql()
-	sql = gb.Select("users").Where("lastname", "=", "ipsum").Union(sql).ToSql()
-	fmt.Printf("Union: \n%s\n", sql)
+	sql = gb.Table("users").Select().Where("lastname", "=", "lorem").ToSql()
+	sql = gb.Table("users").Select().Where("lastname", "=", "ipsum").Union(sql).ToSql()
+	fmt.Printf("Union: \n%s\n\n", sql)
 
 	// example subquery
 	mainBuilder := &query.GoBuilder{}
 	subBuilder := &query.GoBuilder{}
 
-	subBuilder.Select("users", "id").Where("age", ">", 30)
-	mainBuilder.Select("orders", "order_id", "user_id").Where("user_id", "IN", subBuilder)
+	subBuilder.Table("users").Select("id").Where("age", ">", 30)
+	mainBuilder.Table("orders").Select("order_id", "user_id").Where("user_id", "IN", subBuilder)
 
 	fmt.Println(mainBuilder.ToSql())
 	// SELECT order_id, user_id FROM orders WHERE user_id IN (SELECT id FROM users WHERE age > '30')
