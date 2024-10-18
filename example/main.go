@@ -72,7 +72,5 @@ func main() {
 	subBuilder.Table("users").Select("id").Where("age", ">", 30)
 	mainBuilder.Table("orders").Select("order_id", "user_id").Where("user_id", "IN", subBuilder)
 
-	fmt.Println(mainBuilder.ToSql())
-	// SELECT order_id, user_id FROM orders WHERE user_id IN (SELECT id FROM users WHERE age > '30')
-
+	fmt.Printf("SubQuery: \n%s\n\n", mainBuilder.ToSql())
 }
