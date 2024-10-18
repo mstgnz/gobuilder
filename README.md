@@ -12,20 +12,20 @@ var gb GoBuilder
 
 ```go
 // all columns
-gb.Select("users").Where("id","=","1").ToSql()
+gb.Table("users").Select().Where("id","=","1").ToSql()
 
 // filter columns
-gb.Select("users", "firstname", "lastname", "create_date").
-    Where("id", "=", "1").
+gb.Table("users").Select("firstname", "lastname", "created_at").
+    Where("id", "=", 1).
     ToSql()
 ```
 ```sql
 Result: SELECT * FROM users WHERE id = '1'
-Result: SELECT firstname,lastname,create_date FROM users WHERE id = '1'
+Result: SELECT firstname,lastname,created_at FROM users WHERE id = 1
 ```
 ### where orWhere
 ```go
-gb.Select("users").
+gb.Table("users").Select().
     Where("id", "=", "1").
     OrWhere("email", "=", "loremipsum@lrmpsm.com").
     ToSql()
@@ -35,7 +35,7 @@ Result: SELECT * FROM users WHERE id='1' OR email='loremipsum@lrmpsm.com'
 ```
 ### join
 ```go
-gb.Select("users as u", "u.firstname", "u.lastname", "a.address").
+gb.Table("users as u").Select("u.firstname", "u.lastname", "a.address").
     Join("INNER", "address as a", "a.user_id=u.id").
     Where("u.email", "=", "loremipsum@lrmpsm.com").
     ToSql()
@@ -45,52 +45,52 @@ Result: SELECT u.firstname,u.lastname,a.address FROM users as u INNER JOIN addre
 ```
 ### between
 ```go
-gb.Select("users").
+gb.Table("users").Select().
 	Where("id", "=", "1").
-	Between("create_date", "2021-01-01", "2021-03-16").
+	Between("created_at", "2021-01-01", "2021-03-16").
 	ToSql()
 ```
 ```sql
-Result: SELECT * FROM users WHERE id='1' AND create_date BETWEEN '2021-01-01' AND '2021-03-16'
+Result: SELECT * FROM users WHERE id='1' AND created_at BETWEEN '2021-01-01' AND '2021-03-16'
 ```
 ### limit
 ```go
-gb.Select("users").
+gb.Table("users").Select().
     Where("id", "=", "1").
-    Between("create_date", "2021-01-01", "2021-03-16").
+    Between("created_at", "2021-01-01", "2021-03-16").
     Limit(1, 5).
     ToSql()
 ```
 ```sql
-Result: SELECT * FROM users WHERE id='1' AND create_date BETWEEN '2021-01-01' AND '2021-03-16' LIMIT 1,5
+Result: SELECT * FROM users WHERE id='1' AND created_at BETWEEN '2021-01-01' AND '2021-03-16' LIMIT 1,5
 ```
 ### group by
 ```go
-gb.Select("users").
+gb.Table("users").Select().
 	Where("id", "=", "1").
-	Between("create_date", "2021-01-01", "2021-03-16").
+	Between("created_at", "2021-01-01", "2021-03-16").
 	GroupBy("lastname").
 	ToSql()
 ```
 ```sql
-Result: SELECT * FROM users WHERE id='1' AND create_date BETWEEN '2021-01-01' AND '2021-03-16' GROUP BY lastname
+Result: SELECT * FROM users WHERE id='1' AND created_at BETWEEN '2021-01-01' AND '2021-03-16' GROUP BY lastname
 ```
 ### order by
 ```go
-gb.Select("users").
+gb.Table("users").Select().
 	Where("id", "=", "1").
-	Between("create_date", "2021-01-01", "2021-03-16").
+	Between("created_at", "2021-01-01", "2021-03-16").
 	GroupBy("lastname").
 	OrderBy("id", "DESC").
 	ToSql()
 ```
 ```sql
-Result: SELECT * FROM users WHERE id='1' AND create_date BETWEEN '2021-01-01' AND '2021-03-16' GROUP BY lastname ORDER BY id DESC
+Result: SELECT * FROM users WHERE id='1' AND created_at BETWEEN '2021-01-01' AND '2021-03-16' GROUP BY lastname ORDER BY id DESC
 ```
 ### union
 ```go
-s1 := gb.Select("users").Where("lastname", "=", "lorem").ToSql()
-s2 := gb.Select("users").Where("lastname", "=", "ipsum").Union(s1).ToSql()
+s1 := gb.Table("users").Select().Where("lastname", "=", "lorem").ToSql()
+s2 := gb.Table("users").Select().Where("lastname", "=", "ipsum").Union(s1).ToSql()
 ```
 ```sql
 Result: SELECT * FROM users WHERE lastname='ipsum' UNION SELECT * FROM users WHERE lastname='lorem'
@@ -102,7 +102,7 @@ args := map[string]string{
 "firstname": "Lorem",
 "lastname":  "IPSUM",
 }
-gb.Insert("users", args).ToSql()
+gb.Table("users").Insert(args).ToSql()
 ```
 ```sql
 Result : INSERT INTO users (lastname,firstname) VALUES ('Lorem','IPSUM')
@@ -114,7 +114,7 @@ args := map[string]string{
 "firstname": "Lorem",
 "lastname":  "IPSUM",
 }
-gb.Update("users", args).Where("email", "=", "loremipsum@lrmpsm.com").ToSql()
+gb.Table("users").Update(args).Where("email", "=", "loremipsum@lrmpsm.com").ToSql()
 ```
 ```sql
 Result: UPDATE users SET firstname='Lorem', lastname='IPSUM' WHERE email='loremipsum@lrmpsm.com'
@@ -122,7 +122,7 @@ Result: UPDATE users SET firstname='Lorem', lastname='IPSUM' WHERE email='loremi
 
 ## Delete
 ```go
-gb.Delete("users").Where("email", "=", "loremipsum@lrmpsm.com").ToSql()
+gb.Table("users").Delete().Where("email", "=", "loremipsum@lrmpsm.com").ToSql()
 ```
 ```sql
 Result: DELETE FROM users WHERE email='loremipsum@lrmpsm.com'

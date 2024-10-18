@@ -2,230 +2,301 @@ package gobuilder
 
 import (
 	"fmt"
+	"reflect"
+	"regexp"
 	"strings"
+)
 
-	"golang.org/x/exp/maps"
+const (
+	InnerJoin = "INNER"
+	LeftJoin  = "LEFT"
+	RightJoin = "RIGHT"
+	FullJoin  = "FULL"
 )
 
 type GoBuilder struct {
-	sql string
+	TableClause   string
+	SelectClause  string
+	WhereClause   string
+	JoinClause    string
+	GroupByClause string
+	HavingClause  string
+	OrderByClause string
+	LimitClause   string
+	UnionClause   string
 }
 
-func (gb *GoBuilder) Select(table string, columns ...string) *GoBuilder {
+// NewGoBuilder initializes a new instance of GoBuilder
+func NewGoBuilder() *GoBuilder {
+	return &GoBuilder{}
+}
+
+// Table specifies the table name for the query
+func (gb *GoBuilder) Table(table string) *GoBuilder {
+	gb.TableClause = table
+	return gb
+}
+
+// Select defines the columns to be selected in the query
+func (gb *GoBuilder) Select(columns ...string) *GoBuilder {
 	if len(columns) == 0 {
 		columns = append(columns, "*")
 	}
-	gb.sql = fmt.Sprintf("SELECT %v FROM %v", strings.Join(columns, ", "), table)
+	gb.SelectClause = fmt.Sprintf("SELECT %s FROM %s", strings.Join(columns, ", "), gb.TableClause)
 	return gb
 }
 
-func (gb *GoBuilder) SelectDistinct(table string, columns ...string) *GoBuilder {
+// SelectDistinct defines the distinct columns to be selected
+func (gb *GoBuilder) SelectDistinct(columns ...string) *GoBuilder {
 	if len(columns) == 0 {
 		columns = append(columns, "*")
 	}
-	gb.sql = fmt.Sprintf("SELECT DISTINCT %v FROM %v", strings.Join(columns, ", "), table)
+	gb.SelectClause = fmt.Sprintf("SELECT DISTINCT %s FROM %s", strings.Join(columns, ", "), gb.TableClause)
 	return gb
 }
 
-func (gb *GoBuilder) Insert(table string, args map[string]any) *GoBuilder {
+// Insert adds an INSERT INTO statement to the query with bind parameters
+func (gb *GoBuilder) Insert(args map[string]any) *GoBuilder {
 	if len(args) != 0 {
-		keys := maps.Keys(args)
-		var values []string
-		for _, v := range maps.Values(args) {
-			values = append(values, fmt.Sprintf("'%v'", v))
-		}
-		gb.sql = fmt.Sprintf("INSERT INTO %v (%v) VALUES (%v)", table, strings.Join(keys, ", "), strings.Join(values, ", "))
-	}
-	return gb
-}
+		keys := make([]string, 0, len(args))
+		values := make([]string, 0, len(args))
 
-func (gb *GoBuilder) Update(table string, args map[string]any) *GoBuilder {
-	if len(args) != 0 {
-		var setClauses []string
 		for key, value := range args {
-			setClauses = append(setClauses, fmt.Sprintf("%v = '%v'", key, value))
+			cleanedValue := cleanValue(value)
+			keys = append(keys, key)
+			values = append(values, cleanedValue)
 		}
-		gb.sql = fmt.Sprintf("UPDATE %v SET %v", table, strings.Join(setClauses, ", "))
+
+		gb.SelectClause = fmt.Sprintf("INSERT INTO %s (%v) VALUES (%v)", gb.TableClause, strings.Join(keys, ", "), strings.Join(values, ", "))
 	}
 	return gb
 }
 
-func (gb *GoBuilder) Delete(table string) *GoBuilder {
-	gb.sql = fmt.Sprintf("DELETE FROM %v", table)
+// Update builds an UPDATE statement with bind parameters
+func (gb *GoBuilder) Update(args map[string]any) *GoBuilder {
+	if len(args) != 0 {
+		setClauses := make([]string, 0, len(args))
+
+		for key, value := range args {
+			setClauses = append(setClauses, fmt.Sprintf("%s = %v", key, cleanValue(value)))
+		}
+
+		gb.SelectClause = fmt.Sprintf("UPDATE %s SET %v", gb.TableClause, strings.Join(setClauses, ", "))
+	}
 	return gb
 }
 
+// Delete builds a DELETE statement
+func (gb *GoBuilder) Delete() *GoBuilder {
+	gb.SelectClause = fmt.Sprintf("DELETE FROM %v", gb.TableClause)
+	return gb
+}
+
+// Where adds a WHERE clause with bind parameters
 func (gb *GoBuilder) Where(key, opt string, val any) *GoBuilder {
-	return gb.where("AND", key, opt, val)
+	return gb.addWhereClause("AND", key, opt, val)
 }
 
+// OrWhere adds an OR WHERE clause with bind parameters
 func (gb *GoBuilder) OrWhere(key, opt string, val any) *GoBuilder {
-	return gb.where("OR", key, opt, val)
+	return gb.addWhereClause("OR", key, opt, val)
 }
 
-func (gb *GoBuilder) where(OP, key, opt string, val any) *GoBuilder {
-	var clause string
-
-	switch v := val.(type) {
-	case int, int64, float32, float64:
-		clause = fmt.Sprintf("%v %v %v", key, opt, v)
-	case *GoBuilder:
-		clause = fmt.Sprintf("%v %v (%v)", key, opt, v.ToSql())
-	default:
-		clause = fmt.Sprintf("%v %v '%v'", key, opt, v)
-	}
-
-	if strings.Contains(gb.sql, "WHERE") {
-		gb.sql = fmt.Sprintf("%v %v %v", gb.sql, OP, clause)
-	} else {
-		gb.sql = fmt.Sprintf("%v WHERE %v", gb.sql, clause)
-	}
-	return gb
-}
-
+// In adds an IN clause with bind parameters
 func (gb *GoBuilder) In(column string, args ...any) *GoBuilder {
-	return gb.in("AND", column, args...)
+	return gb.addInClause("AND", column, args...)
 }
 
+// OrIn adds an OR IN clause with bind parameters
 func (gb *GoBuilder) OrIn(column string, args ...any) *GoBuilder {
-	return gb.in("OR", column, args...)
+	return gb.addInClause("OR", column, args...)
 }
 
-func (gb *GoBuilder) in(OP, column string, args ...any) *GoBuilder {
-	if len(args) > 0 {
-		var values []string
-		for _, arg := range args {
-			switch v := arg.(type) {
-			case int, int64, float32, float64:
-				values = append(values, fmt.Sprintf("%v", v))
-			default:
-				values = append(values, fmt.Sprintf("'%v'", v))
-			}
-		}
-		clause := fmt.Sprintf("%v IN (%v)", column, strings.Join(values, ", "))
-		if strings.Contains(gb.sql, "WHERE") {
-			gb.sql = fmt.Sprintf("%v %v %v", gb.sql, OP, clause)
-		} else {
-			gb.sql = fmt.Sprintf("%v WHERE %v", gb.sql, clause)
-		}
-	}
-	return gb
-}
-
+// Between adds a BETWEEN clause with bind parameters
 func (gb *GoBuilder) Between(column string, args ...any) *GoBuilder {
 	return gb.between("AND", column, args...)
 }
 
+// OrBetween adds an OR BETWEEN clause with bind parameters
 func (gb *GoBuilder) OrBetween(column string, args ...any) *GoBuilder {
 	return gb.between("OR", column, args...)
 }
 
+// IsNull adds an IS NULL clause
+func (gb *GoBuilder) IsNull(column string) *GoBuilder {
+	clause := fmt.Sprintf("%s IS NULL", column)
+	gb.addClause("AND", clause)
+	return gb
+}
+
+// OrIsNull adds an OR IS NULL clause
+func (gb *GoBuilder) OrIsNull(column string) *GoBuilder {
+	clause := fmt.Sprintf("%s IS NULL", column)
+	gb.addClause("OR", clause)
+	return gb
+}
+
+// IsNotNull adds an IS NOT NULL clause
+func (gb *GoBuilder) IsNotNull(column string) *GoBuilder {
+	clause := fmt.Sprintf("%s IS NOT NULL", column)
+	gb.addClause("AND", clause)
+	return gb
+}
+
+// OrIsNotNull adds an OR IS NOT NULL clause
+func (gb *GoBuilder) OrIsNotNull(column string) *GoBuilder {
+	clause := fmt.Sprintf("%s IS NOT NULL", column)
+	gb.addClause("OR", clause)
+	return gb
+}
+
+// Having adds a HAVING clause
+func (gb *GoBuilder) Having(condition string) *GoBuilder {
+	gb.HavingClause = fmt.Sprintf("HAVING %s", condition)
+	return gb
+}
+
+// OrHaving adds an OR HAVING clause
+func (gb *GoBuilder) OrHaving(condition string) *GoBuilder {
+	if gb.HavingClause != "" {
+		gb.HavingClause = fmt.Sprintf("%s OR %s", gb.HavingClause, condition)
+	} else {
+		gb.HavingClause = fmt.Sprintf("HAVING %s", condition)
+	}
+	return gb
+}
+
+// Join adds a JOIN clause
+func (gb *GoBuilder) Join(joinType, table, condition string) *GoBuilder {
+	gb.JoinClause = fmt.Sprintf("%s JOIN %s ON %s", joinType, table, condition)
+	return gb
+}
+
+// Limit adds a LIMIT clause
+func (gb *GoBuilder) Limit(start, limit int) *GoBuilder {
+	gb.LimitClause = fmt.Sprintf("LIMIT %d, %d", start, limit)
+	return gb
+}
+
+// GroupBy adds a GROUP BY clause
+func (gb *GoBuilder) GroupBy(columns ...string) *GoBuilder {
+	gb.GroupByClause = fmt.Sprintf("GROUP BY %v", strings.Join(columns, ", "))
+	return gb
+}
+
+// OrderBy adds an ORDER BY ASC clause
+func (gb *GoBuilder) OrderBy(columns ...string) *GoBuilder {
+	gb.OrderByClause = fmt.Sprintf("ORDER BY %v ASC", strings.Join(columns, ", "))
+	return gb
+}
+
+// OrderByDesc adds an ORDER BY DESC clause
+func (gb *GoBuilder) OrderByDesc(columns ...string) *GoBuilder {
+	gb.OrderByClause = fmt.Sprintf("ORDER BY %v DESC", strings.Join(columns, ", "))
+	return gb
+}
+
+// Union adds a UNION clause
+func (gb *GoBuilder) Union(sql string) *GoBuilder {
+	if gb.UnionClause == "" {
+		gb.UnionClause = fmt.Sprintf("UNION %v", sql)
+	} else {
+		gb.UnionClause = fmt.Sprintf("%v UNION %v", gb.UnionClause, sql)
+	}
+	return gb
+}
+
+// ToSql returns the final SQL query and the associated bind parameters
+func (gb *GoBuilder) ToSql() string {
+	clauses := []string{
+		gb.SelectClause,
+		gb.JoinClause,
+		gb.WhereClause,
+		gb.GroupByClause,
+		gb.HavingClause,
+		gb.OrderByClause,
+		gb.LimitClause,
+		gb.UnionClause,
+	}
+	query := strings.Join(clauses, " ")
+	re := regexp.MustCompile(`\s+`)
+	gb.reset()
+	return strings.TrimSpace(re.ReplaceAllString(query, " "))
+}
+
+// Private method to RESET builder
+func (gb *GoBuilder) reset() {
+	v := reflect.ValueOf(gb).Elem()
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Field(i)
+		if field.Kind() == reflect.String {
+			field.SetString("")
+		}
+	}
+}
+
+// Private method to add WHERE or OR WHERE clauses with bind parameters
+func (gb *GoBuilder) addWhereClause(OP, key, opt string, val any) *GoBuilder {
+	clause := ""
+	switch v := val.(type) {
+	case *GoBuilder:
+		clause = fmt.Sprintf("%v %v (%v)", key, opt, v.ToSql())
+	default:
+		clause = fmt.Sprintf("%v %v %v", key, opt, cleanValue(val))
+	}
+	gb.addClause(OP, clause)
+	return gb
+}
+
+// Private method to add clauses with logical operators
+func (gb *GoBuilder) addClause(OP, clause string) {
+	if gb.WhereClause != "" {
+		gb.WhereClause = fmt.Sprintf("%v %v %v", gb.WhereClause, OP, clause)
+	} else {
+		gb.WhereClause = fmt.Sprintf("WHERE %v", clause)
+	}
+}
+
+// Private method to add IN clauses with values directly
+func (gb *GoBuilder) addInClause(OP, column string, args ...any) *GoBuilder {
+	if len(args) > 0 {
+		values := make([]string, len(args))
+		for i, arg := range args {
+			switch v := arg.(type) {
+			case string:
+				values[i] = fmt.Sprintf("%v", cleanValue(v))
+			default:
+				values[i] = fmt.Sprintf("%d", v)
+			}
+		}
+		clause := fmt.Sprintf("%v IN (%v)", column, strings.Join(values, ", "))
+		gb.addClause(OP, clause)
+	}
+	return gb
+}
+
+// Private method to add BETWEEN clauses with values directly
 func (gb *GoBuilder) between(OP, column string, args ...any) *GoBuilder {
 	if len(args) == 2 {
 		var clause string
 		switch args[0].(type) {
-		case int, int64, float32, float64:
-			clause = fmt.Sprintf("%v BETWEEN %v AND %v", column, args[0], args[1])
+		case string:
+			clause = fmt.Sprintf("%v BETWEEN %s AND %s", column, cleanValue(fmt.Sprintf("%v", args[0])), cleanValue(fmt.Sprintf("%v", args[1])))
 		default:
-			clause = fmt.Sprintf("%v BETWEEN '%v' AND '%v'", column, args[0], args[1])
+			clause = fmt.Sprintf("%v BETWEEN %v AND %v", column, args[0], args[1])
 		}
-		if strings.Contains(gb.sql, "WHERE") {
-			gb.sql = fmt.Sprintf("%v %v %v", gb.sql, OP, clause)
-		} else {
-			gb.sql = fmt.Sprintf("%v WHERE %v", gb.sql, clause)
-		}
+		gb.addClause(OP, clause)
 	}
 	return gb
 }
 
-func (gb *GoBuilder) IsNull(column string) *GoBuilder {
-	clause := fmt.Sprintf("%v IS NULL", column)
-	if strings.Contains(gb.sql, "WHERE") {
-		gb.sql = fmt.Sprintf("%v AND %v", gb.sql, clause)
-	} else {
-		gb.sql = fmt.Sprintf("%v WHERE %v", gb.sql, clause)
+// cleanValue trims and escapes potentially harmful characters from the value
+func cleanValue(value any) string {
+	switch v := value.(type) {
+	case string:
+		cleaned := strings.ReplaceAll(v, "'", "''")
+		return "'" + cleaned + "'"
+	default:
+		return fmt.Sprintf("%v", v)
 	}
-	return gb
-}
-
-func (gb *GoBuilder) OrIsNull(column string) *GoBuilder {
-	clause := fmt.Sprintf("%v IS NULL", column)
-	if strings.Contains(gb.sql, "WHERE") {
-		gb.sql = fmt.Sprintf("%v OR %v", gb.sql, clause)
-	} else {
-		gb.sql = fmt.Sprintf("%v WHERE %v", gb.sql, clause)
-	}
-	return gb
-}
-
-func (gb *GoBuilder) IsNotNull(column string) *GoBuilder {
-	clause := fmt.Sprintf("%v IS NOT NULL", column)
-	if strings.Contains(gb.sql, "WHERE") {
-		gb.sql = fmt.Sprintf("%v AND %v", gb.sql, clause)
-	} else {
-		gb.sql = fmt.Sprintf("%v WHERE %v", gb.sql, clause)
-	}
-	return gb
-}
-
-func (gb *GoBuilder) OrIsNotNull(column string) *GoBuilder {
-	clause := fmt.Sprintf("%v IS NOT NULL", column)
-	if strings.Contains(gb.sql, "WHERE") {
-		gb.sql = fmt.Sprintf("%v OR %v", gb.sql, clause)
-	} else {
-		gb.sql = fmt.Sprintf("%v WHERE %v", gb.sql, clause)
-	}
-	return gb
-}
-
-func (gb *GoBuilder) Having(condition string) *GoBuilder {
-	if strings.Contains(gb.sql, "HAVING") {
-		gb.sql = fmt.Sprintf("%v AND %v", gb.sql, condition)
-	} else {
-		gb.sql = fmt.Sprintf("%v HAVING %v", gb.sql, condition)
-	}
-	return gb
-}
-
-func (gb *GoBuilder) OrHaving(condition string) *GoBuilder {
-	if strings.Contains(gb.sql, "HAVING") {
-		gb.sql = fmt.Sprintf("%v OR %v", gb.sql, condition)
-	} else {
-		gb.sql = fmt.Sprintf("%v HAVING %v", gb.sql, condition)
-	}
-	return gb
-}
-
-func (gb *GoBuilder) Join(joinType, table, onCondition string) *GoBuilder {
-	gb.sql = fmt.Sprintf("%v %v JOIN %v ON %v", gb.sql, joinType, table, onCondition)
-	return gb
-}
-
-func (gb *GoBuilder) Limit(start, limit int) *GoBuilder {
-	gb.sql = fmt.Sprintf("%v LIMIT %v, %v", gb.sql, start, limit)
-	return gb
-}
-
-func (gb *GoBuilder) GroupBy(columns ...string) *GoBuilder {
-	gb.sql = fmt.Sprintf("%v GROUP BY %v", gb.sql, strings.Join(columns, ", "))
-	return gb
-}
-
-func (gb *GoBuilder) OrderBy(columns ...string) *GoBuilder {
-	gb.sql = fmt.Sprintf("%v ORDER BY %v ASC", gb.sql, strings.Join(columns, ", "))
-	return gb
-}
-
-func (gb *GoBuilder) OrderByDesc(columns ...string) *GoBuilder {
-	gb.sql = fmt.Sprintf("%v ORDER BY %v DESC", gb.sql, strings.Join(columns, ", "))
-	return gb
-}
-
-func (gb *GoBuilder) Union(sql string) *GoBuilder {
-	gb.sql = fmt.Sprintf("%v UNION %v", gb.sql, sql)
-	return gb
-}
-
-func (gb *GoBuilder) ToSql() string {
-	return gb.sql
 }
