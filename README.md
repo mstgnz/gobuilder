@@ -98,7 +98,7 @@ Result: SELECT * FROM users WHERE lastname='ipsum' UNION SELECT * FROM users WHE
 
 ## Insert
 ```go
-args := map[string]string{
+args := map[string]any{
 "firstname": "Lorem",
 "lastname":  "IPSUM",
 }
@@ -110,7 +110,7 @@ Result : INSERT INTO users (lastname,firstname) VALUES ('Lorem','IPSUM')
 
 ## Update
 ```go
-args := map[string]string{
+args := map[string]any{
 "firstname": "Lorem",
 "lastname":  "IPSUM",
 }
