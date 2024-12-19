@@ -173,8 +173,8 @@ func (gb *GoBuilder) Join(joinType, table, condition string) *GoBuilder {
 }
 
 // Limit adds a LIMIT clause
-func (gb *GoBuilder) Limit(start, limit int) *GoBuilder {
-	gb.LimitClause = fmt.Sprintf("LIMIT %d, %d", start, limit)
+func (gb *GoBuilder) Limit(offset, limit int) *GoBuilder {
+	gb.LimitClause = fmt.Sprintf("LIMIT %d, %d", offset, limit)
 	return gb
 }
 
