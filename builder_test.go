@@ -6,303 +6,437 @@ import (
 )
 
 var (
-	got      string
-	expected string
-	s        GoBuilder
+	query          string
+	params         []any
+	queryExpected  string
+	paramsExpected []any
+	s              = NewGoBuilder(Postgres)
 )
 
 func TestSql_Select(t *testing.T) {
-	expected = "SELECT * FROM users"
-	got = s.Table("users").Select().ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "SELECT * FROM users"
+	paramsExpected = []any{}
+	query, params = s.Table("users").Select().ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_Select_With_Columns(t *testing.T) {
-	expected = "SELECT firstname, lastname FROM users"
-	got = s.Table("users").Select("firstname", "lastname").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "SELECT firstname, lastname FROM users"
+	paramsExpected = []any{}
+	query, params = s.Table("users").Select("firstname", "lastname").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_Distinct(t *testing.T) {
-	expected = "SELECT DISTINCT name, age FROM users"
-	got = s.Table("users").SelectDistinct("name", "age").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "SELECT DISTINCT name, age FROM users"
+	paramsExpected := []any{}
+	query, params = s.Table("users").SelectDistinct("name", "age").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_Insert(t *testing.T) {
-	insert := map[string]any{"firstname": "Mesut", "lastname": "GENEZ"}
-	expected = "INSERT INTO users (firstname, lastname) VALUES ('Mesut', 'GENEZ')"
-	got = s.Table("users").Insert(insert).ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "INSERT INTO users (firstname, lastname) VALUES ($1, $2)"
+	paramsExpected := []any{"Mesut", "GENEZ"}
+	args := map[string]any{"firstname": "Mesut", "lastname": "GENEZ"}
+	query, params = s.Table("users").Insert(args).ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_Update(t *testing.T) {
 	// sometimes it may not pass the test because the map is unordered
-	expected = "UPDATE users SET firstname = 'Mesut', lastname = 'GENEZ'"
-	got = s.Table("users").Update(map[string]any{"firstname": "Mesut", "lastname": "GENEZ"}).ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "UPDATE users SET firstname = $1, lastname = $2"
+	paramsExpected := []any{"Mesut", "GENEZ"}
+	query, params = s.Table("users").Update(map[string]any{"firstname": "Mesut", "lastname": "GENEZ"}).ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_Delete(t *testing.T) {
-	expected = "DELETE FROM users"
-	got = s.Table("users").Delete().ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "DELETE FROM users"
+	paramsExpected := []any{}
+	query, params = s.Table("users").Delete().ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_Where(t *testing.T) {
-	expected = "WHERE firstname = 'Mesut'"
-	got = s.Where("firstname", "=", "Mesut").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "WHERE firstname = $1"
+	paramsExpected := []any{"Mesut"}
+	query, params = s.Where("firstname", "=", "Mesut").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_WhereWithInt(t *testing.T) {
-	expected = "WHERE id = 55"
-	got = s.Where("id", "=", 55).ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "WHERE id = $1"
+	paramsExpected := []any{55}
+	query, params = s.Where("id", "=", 55).ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_WhereWithFloat(t *testing.T) {
-	expected = "WHERE amount = 55.5"
-	got = s.Where("amount", "=", 55.5).ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "WHERE amount = $1"
+	paramsExpected := []any{55.5}
+	query, params = s.Where("amount", "=", 55.5).ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_Where_With_And(t *testing.T) {
-	expected = "WHERE firstname = 'Mesut' AND lastname = 'GENEZ'"
-	got = s.Where("firstname", "=", "Mesut").Where("lastname", "=", "GENEZ").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "WHERE firstname = $1 AND lastname = $2"
+	paramsExpected := []any{"Mesut", "GENEZ"}
+	query, params = s.Where("firstname", "=", "Mesut").Where("lastname", "=", "GENEZ").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_OrWhere(t *testing.T) {
-	expected = "WHERE firstname = 'Mesut'"
-	got = s.OrWhere("firstname", "=", "Mesut").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "WHERE firstname = $1"
+	paramsExpected := []any{"Mesut"}
+	query, params = s.OrWhere("firstname", "=", "Mesut").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_OrWhere_With_And(t *testing.T) {
-	expected = "WHERE firstname = 'Mesut' OR lastname = 'GENEZ'"
-	got = s.OrWhere("firstname", "=", "Mesut").OrWhere("lastname", "=", "GENEZ").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "WHERE firstname = $1 OR lastname = $2"
+	paramsExpected := []any{"Mesut", "GENEZ"}
+	query, params = s.OrWhere("firstname", "=", "Mesut").OrWhere("lastname", "=", "GENEZ").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_In(t *testing.T) {
-	expected = "WHERE firstname IN ('Mesut', 33)"
-	got = s.In("firstname", "Mesut", 33).ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "WHERE firstname IN ($1, $2)"
+	paramsExpected := []any{"Mesut", 33}
+	query, params = s.In("firstname", "Mesut", 33).ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_InWithInt(t *testing.T) {
-	expected = "WHERE id IN (12, 34, 55)"
-	got = s.In("id", 12, 34, 55).ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "WHERE id IN ($1, $2, $3)"
+	paramsExpected := []any{12, 34, 55}
+	query, params = s.In("id", 12, 34, 55).ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_InAnd(t *testing.T) {
-	expected = "WHERE firstname IN ('Mesut') AND lastname IN ('GENEZ')"
-	got = s.In("firstname", "Mesut").In("lastname", "GENEZ").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "WHERE firstname IN ($1) AND lastname IN ($2)"
+	paramsExpected := []any{"Mesut", "GENEZ"}
+	query, params = s.In("firstname", "Mesut").In("lastname", "GENEZ").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_OrIn(t *testing.T) {
-	expected = "WHERE firstname IN ('Mesut')"
-	got = s.OrIn("firstname", "Mesut").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "WHERE firstname IN ($1)"
+	paramsExpected := []any{"Mesut"}
+	query, params = s.OrIn("firstname", "Mesut").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_OrInAnd(t *testing.T) {
-	expected = "WHERE firstname IN ('Mesut', 'GENEZ') OR lastname IN ('GENEZ')"
-	got = s.OrIn("firstname", "Mesut", "GENEZ").OrIn("lastname", "GENEZ").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "WHERE firstname IN ($1, $2) OR lastname IN ($3)"
+	paramsExpected := []any{"Mesut", "GENEZ", "GENEZ"}
+	query, params = s.OrIn("firstname", "Mesut", "GENEZ").OrIn("lastname", "GENEZ").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_Between(t *testing.T) {
-	expected = "WHERE firstname BETWEEN 'Mesut' AND 'GENEZ'"
-	got = s.Between("firstname", "Mesut", "GENEZ").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "WHERE firstname BETWEEN $1 AND $2"
+	paramsExpected := []any{"Mesut", "GENEZ"}
+	query, params = s.Between("firstname", "Mesut", "GENEZ").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_BetweenWithInt(t *testing.T) {
-	expected = "WHERE id BETWEEN 12 AND 55"
-	got = s.Between("id", 12, 55).ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "WHERE id BETWEEN $1 AND $2"
+	paramsExpected := []any{12, 55}
+	query, params = s.Between("id", 12, 55).ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_BetweenWithWhere(t *testing.T) {
-	expected = "WHERE firstname BETWEEN 'Mesut' AND 'GENEZ' AND lastname BETWEEN 'Mesut' AND 'GENEZ'"
-	got = s.Between("firstname", "Mesut", "GENEZ").Between("lastname", "Mesut", "GENEZ").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "WHERE firstname BETWEEN $1 AND $2 AND lastname BETWEEN $3 AND $4"
+	paramsExpected := []any{"Mesut", "GENEZ", "Mesut", "GENEZ"}
+	query, params = s.Between("firstname", "Mesut", "GENEZ").Between("lastname", "Mesut", "GENEZ").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_OrBetween(t *testing.T) {
-	expected = "WHERE firstname BETWEEN 'Mesut' AND 'GENEZ'"
-	got = s.OrBetween("firstname", "Mesut", "GENEZ").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "WHERE firstname BETWEEN $1 AND $2"
+	paramsExpected := []any{"Mesut", "GENEZ"}
+	query, params = s.OrBetween("firstname", "Mesut", "GENEZ").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_OrBetweenWithWhere(t *testing.T) {
-	expected = "WHERE firstname BETWEEN 'Mesut' AND 'GENEZ' OR lastname BETWEEN 'Mesut' AND 'GENEZ'"
-	got = s.OrBetween("firstname", "Mesut", "GENEZ").OrBetween("lastname", "Mesut", "GENEZ").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "WHERE firstname BETWEEN $1 AND $2 OR lastname BETWEEN $3 AND $4"
+	paramsExpected := []any{"Mesut", "GENEZ", "Mesut", "GENEZ"}
+	query, params = s.OrBetween("firstname", "Mesut", "GENEZ").OrBetween("lastname", "Mesut", "GENEZ").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_IsNull(t *testing.T) {
-	expected = "SELECT * FROM users WHERE age = 30 AND name IS NULL"
-	got = s.Table("users").Select().Where("age", "=", 30).IsNull("name").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "SELECT * FROM users WHERE age = $1 AND name IS NULL"
+	paramsExpected := []any{30}
+	query, params = s.Table("users").Select().Where("age", "=", 30).IsNull("name").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_IsNotNull(t *testing.T) {
-	expected = "SELECT * FROM users WHERE age = 30 AND name IS NOT NULL"
-	got = s.Table("users").Select().Where("age", "=", 30).IsNotNull("name").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "SELECT * FROM users WHERE age = $1 AND name IS NOT NULL"
+	paramsExpected := []any{30}
+	query, params = s.Table("users").Select().Where("age", "=", 30).IsNotNull("name").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_Having(t *testing.T) {
-	expected = "SELECT * FROM orders GROUP BY user_id HAVING COUNT(*) > 1"
-	got = s.Table("orders").Select().GroupBy("user_id").Having("COUNT(*) > 1").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "SELECT * FROM orders GROUP BY user_id HAVING COUNT(*) > 1"
+	paramsExpected := []any{}
+	query, params = s.Table("orders").Select().GroupBy("user_id").Having("COUNT(*) > 1").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
 	}
-}
-
-func TestSql_OrHaving(t *testing.T) {
-	expected = "SELECT * FROM orders GROUP BY user_id HAVING COUNT(*) > 1 OR COUNT(*) < 5"
-	got = s.Table("orders").Select().GroupBy("user_id").OrHaving("COUNT(*) > 1").OrHaving("COUNT(*) < 5").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_Join(t *testing.T) {
-	expected = "INNER JOIN users ON roles"
-	got = s.Join("INNER", "users", "roles").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "INNER JOIN users ON roles"
+	paramsExpected := []any{}
+	query, params = s.Join("INNER", "users", "roles").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_Limit(t *testing.T) {
-	expected = "LIMIT 1, 5"
-	got = s.Limit(1, 5).ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "LIMIT 1, 5"
+	paramsExpected := []any{}
+	query, params = s.Limit(1, 5).ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_Group(t *testing.T) {
-	expected = "GROUP BY firstname"
-	got = s.GroupBy("firstname").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "GROUP BY firstname"
+	paramsExpected := []any{}
+	query, params = s.GroupBy("firstname").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_GroupMultiple(t *testing.T) {
-	expected = "GROUP BY firstname, lastname, email"
-	got = s.GroupBy("firstname", "lastname", "email").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "GROUP BY firstname, lastname, email"
+	paramsExpected := []any{}
+	query, params = s.GroupBy("firstname", "lastname", "email").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_OrderBy(t *testing.T) {
-	expected = "ORDER BY firstname ASC"
-	got = s.OrderBy("firstname").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "ORDER BY firstname ASC"
+	paramsExpected := []any{}
+	query, params = s.OrderBy("firstname").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_OrderByMultiple(t *testing.T) {
-	expected = "ORDER BY firstname, lastname ASC"
-	got = s.OrderBy("firstname", "lastname").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "ORDER BY firstname, lastname ASC"
+	paramsExpected := []any{}
+	query, params = s.OrderBy("firstname", "lastname").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_OrderByDesc(t *testing.T) {
-	expected = "ORDER BY firstname DESC"
-	got = s.OrderByDesc("firstname").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "ORDER BY firstname DESC"
+	paramsExpected := []any{}
+	query, params = s.OrderByDesc("firstname").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_OrderByDescMultiple(t *testing.T) {
-	expected = "ORDER BY firstname, lastname DESC"
-	got = s.OrderByDesc("firstname", "lastname").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "ORDER BY firstname, lastname DESC"
+	paramsExpected := []any{}
+	query, params = s.OrderByDesc("firstname", "lastname").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_Union(t *testing.T) {
-	expected = "UNION select * from companies"
-	got = s.Union("select * from companies").ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "UNION select * from companies"
+	paramsExpected := []any{}
+	query, params = s.Union("select * from companies").ToSql()
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }
 
 func TestSql_SubQuery(t *testing.T) {
-	mainBuilder := &GoBuilder{}
-	subBuilder := &GoBuilder{}
+	paramsExpected := []any{"SELECT id FROM users WHERE age > $1"}
+	mainBuilder := NewGoBuilder(Postgres)
+	subBuilder := NewGoBuilder(Postgres)
 
-	subBuilder.Table("users").Select("id").Where("age", ">", 30)
-	mainBuilder.Table("orders").Select("order_id", "user_id").Where("user_id", "IN", subBuilder)
+	query, params = subBuilder.Table("users").Select("id").Where("age", ">", 30).ToSql()
+	query, params = mainBuilder.Table("orders").Select("order_id", "user_id").In("user_id", query).ToSql()
 
-	expected = "SELECT order_id, user_id FROM orders WHERE user_id IN (SELECT id FROM users WHERE age > 30)"
-	got = mainBuilder.ToSql()
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("expected = %v, got %v", expected, got)
+	queryExpected = "SELECT order_id, user_id FROM orders WHERE user_id IN ($1)"
+
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 }

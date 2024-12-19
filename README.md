@@ -7,7 +7,7 @@ This package is only for creating sql text. To run the created sql text, you mus
 ```go
 import "github.com/mstgnz/gobuilder"
 
-var gb GoBuilder
+var gb = gobuilder.NewGoBuilder(gobuilder.Postgres)
 ```
 
 ```go
@@ -20,8 +20,9 @@ gb.Table("users").Select("firstname", "lastname", "created_at").
     ToSql()
 ```
 ```sql
-Result: SELECT * FROM users WHERE id = '1'
-Result: SELECT firstname,lastname,created_at FROM users WHERE id = 1
+Result: SELECT * FROM users WHERE id = $1
+Result: SELECT firstname,lastname,created_at FROM users WHERE id = $1
+Params: [1]
 ```
 ### where orWhere
 ```go
@@ -31,7 +32,8 @@ gb.Table("users").Select().
     ToSql()
 ```
 ```sql
-Result: SELECT * FROM users WHERE id='1' OR email='loremipsum@lrmpsm.com'
+Result: SELECT * FROM users WHERE id=$1 OR email=$2
+Params: ["1", "loremipsum@lrmpsm.com"]
 ```
 ### join
 ```go
@@ -41,7 +43,8 @@ gb.Table("users as u").Select("u.firstname", "u.lastname", "a.address").
     ToSql()
 ```
 ```sql
-Result: SELECT u.firstname,u.lastname,a.address FROM users as u INNER JOIN address as a ON a.user_id=u.id WHERE u.email='loremipsum@lrmpsm.com'
+Result: SELECT u.firstname,u.lastname,a.address FROM users as u INNER JOIN address as a ON a.user_id=u.id WHERE u.email=$1
+Params: ["loremipsum@lrmpsm.com"]
 ```
 ### between
 ```go
@@ -51,7 +54,8 @@ gb.Table("users").Select().
 	ToSql()
 ```
 ```sql
-Result: SELECT * FROM users WHERE id='1' AND created_at BETWEEN '2021-01-01' AND '2021-03-16'
+Result: SELECT * FROM users WHERE id=$1 AND created_at BETWEEN $2 AND $3
+Params: [1, "2021-01-01", "2021-03-16"]
 ```
 ### limit
 ```go
@@ -62,7 +66,8 @@ gb.Table("users").Select().
     ToSql()
 ```
 ```sql
-Result: SELECT * FROM users WHERE id='1' AND created_at BETWEEN '2021-01-01' AND '2021-03-16' LIMIT 1,5
+Result: SELECT * FROM users WHERE id=$1 AND created_at BETWEEN $2 AND $3 LIMIT 1,5
+Params: [1, "2021-01-01", "2021-03-16"]
 ```
 ### group by
 ```go
@@ -73,7 +78,8 @@ gb.Table("users").Select().
 	ToSql()
 ```
 ```sql
-Result: SELECT * FROM users WHERE id='1' AND created_at BETWEEN '2021-01-01' AND '2021-03-16' GROUP BY lastname
+Result: SELECT * FROM users WHERE id=$1 AND created_at BETWEEN $2 AND $3 GROUP BY lastname
+Params: [1, "2021-01-01", "2021-03-16"]
 ```
 ### order by
 ```go
@@ -85,15 +91,17 @@ gb.Table("users").Select().
 	ToSql()
 ```
 ```sql
-Result: SELECT * FROM users WHERE id='1' AND created_at BETWEEN '2021-01-01' AND '2021-03-16' GROUP BY lastname ORDER BY id DESC
+Result: SELECT * FROM users WHERE id=$1 AND created_at BETWEEN $2 AND $3 GROUP BY lastname ORDER BY id DESC
+Params: [1, "2021-01-01", "2021-03-16"]
 ```
 ### union
 ```go
-s1 := gb.Table("users").Select().Where("lastname", "=", "lorem").ToSql()
-s2 := gb.Table("users").Select().Where("lastname", "=", "ipsum").Union(s1).ToSql()
+s1, _ := gb.Table("users").Select().Where("lastname", "=", "lorem").ToSql()
+s2, _ := gb.Table("users").Select().Where("lastname", "=", "ipsum").Union(s1).ToSql()
 ```
 ```sql
-Result: SELECT * FROM users WHERE lastname='ipsum' UNION SELECT * FROM users WHERE lastname='lorem'
+Result: SELECT * FROM users WHERE lastname=$1 UNION SELECT * FROM users WHERE lastname=$2
+Params: ["lorem", "ipsum"]
 ```
 
 ## Insert
@@ -105,7 +113,8 @@ args := map[string]any{
 gb.Table("users").Insert(args).ToSql()
 ```
 ```sql
-Result : INSERT INTO users (lastname,firstname) VALUES ('Lorem','IPSUM')
+Result: INSERT INTO users (lastname,firstname) VALUES ($1,$2)
+Params: ["Lorem", "IPSUM"]
 ```
 
 ## Update
@@ -117,7 +126,8 @@ args := map[string]any{
 gb.Table("users").Update(args).Where("email", "=", "loremipsum@lrmpsm.com").ToSql()
 ```
 ```sql
-Result: UPDATE users SET firstname='Lorem', lastname='IPSUM' WHERE email='loremipsum@lrmpsm.com'
+Result: UPDATE users SET firstname=$1, lastname=$2 WHERE email=$3
+Params: ["Lorem", "IPSUM", "loremipsum@lrmpsm.com"]
 ```
 
 ## Delete
@@ -125,5 +135,6 @@ Result: UPDATE users SET firstname='Lorem', lastname='IPSUM' WHERE email='loremi
 gb.Table("users").Delete().Where("email", "=", "loremipsum@lrmpsm.com").ToSql()
 ```
 ```sql
-Result: DELETE FROM users WHERE email='loremipsum@lrmpsm.com'
+Result: DELETE FROM users WHERE email=$1
+Params: ["loremipsum@lrmpsm.com"]
 ```
