@@ -441,16 +441,16 @@ func TestSql_Having(t *testing.T) {
 }
 
 func TestSql_Join(t *testing.T) {
-	queryExpected = "INNER JOIN users ON roles"
+	queryExpected = "INNER JOIN users ON users.id = roles.user_id"
 	paramsExpected := []any{}
-	query, params = gb.Join("INNER", "users", "roles").Prepare()
+	query, params = gb.Join("users", "users.id", "=", "roles.user_id").Prepare()
 	if !reflect.DeepEqual(queryExpected, query) {
 		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
 	}
 	if !reflect.DeepEqual(paramsExpected, params) {
 		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
-	query = gb.Join("INNER", "users", "roles").Sql()
+	query = gb.Join("users", "users.id", "=", "roles.user_id").Sql()
 	if !reflect.DeepEqual(queryExpected, query) {
 		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
 	}

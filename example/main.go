@@ -30,11 +30,11 @@ func main() {
 	fmt.Printf("Where Or Where Sql: \n%s\n\n", query)
 
 	query, params = gb.Table("users as u").Select("u.firstname", "u.lastname", "a.address").
-		Join("INNER", "address as a", "a.user_id=u.id").
+		Join("address as a", "a.user_id", "=", "u.id").
 		Where("u.email", "=", "loremipsum@lrmpsm.com").Prepare()
 	fmt.Printf("Join Prepare: \n%s\t%v\n", query, params)
 	query = gb.Table("users as u").Select("u.firstname", "u.lastname", "a.address").
-		Join("INNER", "address as a", "a.user_id=u.id").
+		Join("address as a", "a.user_id", "=", "u.id").
 		Where("u.email", "=", "loremipsum@lrmpsm.com").Sql()
 	fmt.Printf("Join Sql: \n%s\n\n", query)
 
