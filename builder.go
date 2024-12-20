@@ -36,15 +36,18 @@ type GoBuilder struct {
 	paramsClause  []any
 	counterClause int
 	holderClause  SQLDialect
+	holderCode    string
 }
 
 // NewGoBuilder initializes a new instance of GoBuilder
 func NewGoBuilder(holderClause SQLDialect) *GoBuilder {
-	return &GoBuilder{
+	gb := &GoBuilder{
 		paramsClause:  []any{},
 		counterClause: 1,
 		holderClause:  holderClause,
 	}
+	gb.holderCode = gb.getPlaceholderCode()
+	return gb
 }
 
 // Table specifies the table name for the query
@@ -219,8 +222,33 @@ func (gb *GoBuilder) Union(sql string) *GoBuilder {
 	return gb
 }
 
-// ToSql returns the final SQL query and the associated bind parameters
-func (gb *GoBuilder) ToSql() (string, []any) {
+// Sql returns the final SQL query
+func (gb *GoBuilder) Sql() string {
+	clauses := []string{
+		gb.selectClause,
+		gb.joinClause,
+		gb.whereClause,
+		gb.groupByClause,
+		gb.havingClause,
+		gb.orderByClause,
+		gb.limitClause,
+		gb.unionClause,
+	}
+	query := strings.Join(clauses, " ")
+	re := regexp.MustCompile(`\s+`)
+	query = strings.TrimSpace(re.ReplaceAllString(query, " "))
+
+	params := gb.paramsClause
+	for i, param := range params {
+		placeholder := fmt.Sprintf("%s%d", gb.holderCode, i+1)
+		query = strings.Replace(query, placeholder, gb.cleanValue(param), 1)
+	}
+	gb.reset()
+	return query
+}
+
+// Prepare returns the final SQL query and the associated bind parameters
+func (gb *GoBuilder) Prepare() (string, []any) {
 	clauses := []string{
 		gb.selectClause,
 		gb.joinClause,
@@ -241,27 +269,13 @@ func (gb *GoBuilder) ToSql() (string, []any) {
 
 // Private method to RESET builder
 func (gb *GoBuilder) reset() {
-	*gb = GoBuilder{
-		paramsClause:  []any{},
-		counterClause: 1,
-		holderClause:  gb.holderClause,
-	}
+	*gb = *NewGoBuilder(Postgres)
 }
 
 // Private method to add parameters
 func (gb *GoBuilder) addParam(value any) string {
 	gb.paramsClause = append(gb.paramsClause, value)
-	var placeholder string
-	switch gb.holderClause {
-	case Postgres:
-		placeholder = fmt.Sprintf("$%d", gb.counterClause)
-	case SQLServer:
-		placeholder = fmt.Sprintf("@%d", gb.counterClause)
-	case Oracle:
-		placeholder = fmt.Sprintf(":%d", gb.counterClause)
-	default: // mysql and sqlite
-		placeholder = fmt.Sprintf("?%d", gb.counterClause)
-	}
+	placeholder := fmt.Sprintf("%s%d", gb.holderCode, gb.counterClause)
 	gb.counterClause++
 	return placeholder
 }
@@ -295,4 +309,30 @@ func (gb *GoBuilder) between(OP, column string, args ...any) *GoBuilder {
 		gb.addClause(OP, clause)
 	}
 	return gb
+}
+
+// cleanValue trims and escapes potentially harmful characters from the value
+func (gb *GoBuilder) cleanValue(value any) string {
+	switch v := value.(type) {
+	case string:
+		cleaned := strings.ReplaceAll(v, "'", "''")
+		return "'" + cleaned + "'"
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+func (gb *GoBuilder) getPlaceholderCode() string {
+	var code string
+	switch gb.holderClause {
+	case Postgres:
+		code = "$"
+	case SQLServer:
+		code = "@"
+	case Oracle:
+		code = ":"
+	default: // mysql and sqlite
+		code = "?"
+	}
+	return code
 }
