@@ -3,6 +3,7 @@ package gobuilder
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -27,12 +28,12 @@ type GoBuilder struct {
 	tableClause   string
 	selectClause  string
 	whereClause   string
-	joinClause    string
 	groupByClause string
 	havingClause  string
 	orderByClause string
 	limitClause   string
 	unionClause   string
+	joinClauses   []string
 	paramsClause  []any
 	counterClause int
 	holderClause  SQLDialect
@@ -78,14 +79,24 @@ func (gb *GoBuilder) SelectDistinct(columns ...string) *GoBuilder {
 func (gb *GoBuilder) Insert(args map[string]any) *GoBuilder {
 	if len(args) != 0 {
 		keys := make([]string, 0, len(args))
-		values := make([]string, 0, len(args))
-
-		for key, value := range args {
+		for key := range args {
 			keys = append(keys, key)
-			values = append(values, gb.addParam(value))
+		}
+		sort.Strings(keys)
+
+		columns := make([]string, 0, len(keys))
+		values := make([]string, 0, len(keys))
+		for _, key := range keys {
+			columns = append(columns, key)
+			values = append(values, gb.addParam(args[key]))
 		}
 
-		gb.selectClause = fmt.Sprintf("INSERT INTO %s (%v) VALUES (%v)", gb.tableClause, strings.Join(keys, ", "), strings.Join(values, ", "))
+		gb.selectClause = fmt.Sprintf(
+			"INSERT INTO %s (%s) VALUES (%s)",
+			gb.tableClause,
+			strings.Join(columns, ", "),
+			strings.Join(values, ", "),
+		)
 	}
 	return gb
 }
@@ -93,13 +104,22 @@ func (gb *GoBuilder) Insert(args map[string]any) *GoBuilder {
 // Update builds an UPDATE statement with bind parameters
 func (gb *GoBuilder) Update(args map[string]any) *GoBuilder {
 	if len(args) != 0 {
-		setClauses := make([]string, 0, len(args))
+		keys := make([]string, 0, len(args))
+		for key := range args {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
 
-		for key, value := range args {
-			setClauses = append(setClauses, fmt.Sprintf("%s = %s", key, gb.addParam(value)))
+		setClauses := make([]string, 0, len(keys))
+		for _, key := range keys {
+			setClauses = append(setClauses, fmt.Sprintf("%s = %s", key, gb.addParam(args[key])))
 		}
 
-		gb.selectClause = fmt.Sprintf("UPDATE %s SET %v", gb.tableClause, strings.Join(setClauses, ", "))
+		gb.selectClause = fmt.Sprintf(
+			"UPDATE %s SET %s",
+			gb.tableClause,
+			strings.Join(setClauses, ", "),
+		)
 	}
 	return gb
 }
@@ -184,13 +204,14 @@ func (gb *GoBuilder) Having(condition string, args ...any) *GoBuilder {
 
 // Join adds a JOIN clause
 func (gb *GoBuilder) Join(joinType, table, condition string) *GoBuilder {
-	gb.joinClause = fmt.Sprintf("%s JOIN %s ON %s", joinType, table, condition)
+	join := fmt.Sprintf("%s JOIN %s ON %s", joinType, table, condition)
+	gb.joinClauses = append(gb.joinClauses, join)
 	return gb
 }
 
 // Limit adds a LIMIT clause
 func (gb *GoBuilder) Limit(offset, limit int) *GoBuilder {
-	gb.limitClause = fmt.Sprintf("LIMIT %d, %d", offset, limit)
+	gb.limitClause = fmt.Sprintf("OFFSET %d LIMIT %d", offset, limit)
 	return gb
 }
 
@@ -226,7 +247,7 @@ func (gb *GoBuilder) Union(sql string) *GoBuilder {
 func (gb *GoBuilder) Sql() string {
 	clauses := []string{
 		gb.selectClause,
-		gb.joinClause,
+		strings.Join(gb.joinClauses, " "),
 		gb.whereClause,
 		gb.groupByClause,
 		gb.havingClause,
@@ -251,7 +272,7 @@ func (gb *GoBuilder) Sql() string {
 func (gb *GoBuilder) Prepare() (string, []any) {
 	clauses := []string{
 		gb.selectClause,
-		gb.joinClause,
+		strings.Join(gb.joinClauses, " "),
 		gb.whereClause,
 		gb.groupByClause,
 		gb.havingClause,

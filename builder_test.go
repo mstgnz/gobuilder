@@ -434,7 +434,6 @@ func TestSql_Having(t *testing.T) {
 	if !reflect.DeepEqual(paramsExpected, params) {
 		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
-	queryExpected = "SELECT * FROM orders GROUP BY user_id HAVING COUNT(*) > 1"
 	query = gb.Table("orders").Select().GroupBy("user_id").Having("COUNT(*) > 1").Sql()
 	if !reflect.DeepEqual(queryExpected, query) {
 		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
@@ -451,7 +450,6 @@ func TestSql_Join(t *testing.T) {
 	if !reflect.DeepEqual(paramsExpected, params) {
 		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
-	queryExpected = "INNER JOIN users ON roles"
 	query = gb.Join("INNER", "users", "roles").Sql()
 	if !reflect.DeepEqual(queryExpected, query) {
 		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
@@ -459,7 +457,7 @@ func TestSql_Join(t *testing.T) {
 }
 
 func TestSql_Limit(t *testing.T) {
-	queryExpected = "LIMIT 1, 5"
+	queryExpected = "OFFSET 1 LIMIT 5"
 	paramsExpected := []any{}
 	query, params = gb.Limit(1, 5).Prepare()
 	if !reflect.DeepEqual(queryExpected, query) {
@@ -468,7 +466,6 @@ func TestSql_Limit(t *testing.T) {
 	if !reflect.DeepEqual(paramsExpected, params) {
 		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
-	queryExpected = "LIMIT 1, 5"
 	query = gb.Limit(1, 5).Sql()
 	if !reflect.DeepEqual(queryExpected, query) {
 		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
