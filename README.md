@@ -116,13 +116,13 @@ Result: SELECT * FROM users WHERE lastname=$1 UNION SELECT * FROM users WHERE la
 Params: ["lorem", "ipsum"]
 ```
 
-## Insert
+## Create
 ```go
 args := map[string]any{
 "firstname": "Lorem",
 "lastname":  "IPSUM",
 }
-gb.Table("users").Insert(args).Prepare()
+gb.Table("users").Create(args).Prepare()
 ```
 ```sql
 Result: INSERT INTO users (lastname,firstname) VALUES ($1,$2)

@@ -64,11 +64,11 @@ func TestSql_Distinct(t *testing.T) {
 	}
 }
 
-func TestSql_Insert(t *testing.T) {
+func TestSql_Create(t *testing.T) {
 	queryExpected = "INSERT INTO users (firstname, lastname) VALUES ($1, $2)"
 	paramsExpected := []any{"Mesut", "GENEZ"}
 	args := map[string]any{"firstname": "Mesut", "lastname": "GENEZ"}
-	query, params = gb.Table("users").Insert(args).Prepare()
+	query, params = gb.Table("users").Create(args).Prepare()
 	if !reflect.DeepEqual(queryExpected, query) {
 		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
 	}
@@ -76,7 +76,7 @@ func TestSql_Insert(t *testing.T) {
 		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
 	}
 	queryExpected = "INSERT INTO users (firstname, lastname) VALUES ('Mesut', 'GENEZ')"
-	query = gb.Table("users").Insert(args).Sql()
+	query = gb.Table("users").Create(args).Sql()
 	if !reflect.DeepEqual(queryExpected, query) {
 		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
 	}

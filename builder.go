@@ -68,8 +68,8 @@ func (gb *GoBuilder) SelectDistinct(columns ...string) *GoBuilder {
 	return gb
 }
 
-// Insert adds an INSERT INTO statement to the query with bind parameters
-func (gb *GoBuilder) Insert(args map[string]any) *GoBuilder {
+// Create adds an INSERT INTO statement to the query with bind parameters
+func (gb *GoBuilder) Create(args map[string]any, returning ...string) *GoBuilder {
 	if len(args) != 0 {
 		keys := make([]string, 0, len(args))
 		for key := range args {
@@ -90,6 +90,9 @@ func (gb *GoBuilder) Insert(args map[string]any) *GoBuilder {
 			strings.Join(columns, ", "),
 			strings.Join(values, ", "),
 		)
+		if len(returning) > 0 {
+			gb.selectClause += fmt.Sprintf(" RETURNING %s", strings.Join(returning, ", "))
+		}
 	}
 	return gb
 }
@@ -196,15 +199,15 @@ func (gb *GoBuilder) Having(condition string, args ...any) *GoBuilder {
 }
 
 // Join adds a JOIN clause
-func (gb *GoBuilder) Join(table, first, opt, last string) *GoBuilder {
-	join := fmt.Sprintf("INNER JOIN %s ON %s %s %s", table, first, opt, last)
+func (gb *GoBuilder) Join(table, first, operator, last string) *GoBuilder {
+	join := fmt.Sprintf("INNER JOIN %s ON %s %s %s", table, first, operator, last)
 	gb.joinClauses = append(gb.joinClauses, join)
 	return gb
 }
 
 // LeftJoin adds a LEFT JOIN clause
-func (gb *GoBuilder) LeftJoin(table, first, opt, last string) *GoBuilder {
-	join := fmt.Sprintf("LEFT JOIN %s ON %s %s %s", table, first, opt, last)
+func (gb *GoBuilder) LeftJoin(table, first, operator, last string) *GoBuilder {
+	join := fmt.Sprintf("LEFT JOIN %s ON %s %s %s", table, first, operator, last)
 	gb.joinClauses = append(gb.joinClauses, join)
 	return gb
 }
