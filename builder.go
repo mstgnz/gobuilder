@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 type SQLDialect string
@@ -16,6 +17,9 @@ const (
 	SQLServer SQLDialect = "sqlserver"
 	Oracle    SQLDialect = "oracle"
 )
+
+// default time for query statute of limitations, you can change this value for each query as you need.
+var Timeout time.Duration = 30
 
 type GoBuilder struct {
 	tableClause   string
