@@ -35,6 +35,7 @@ type GoBuilder struct {
 	counterClause int
 	holderClause  SQLDialect
 	holderCode    string
+	err           error
 }
 
 // NewGoBuilder initializes a new instance of GoBuilder
@@ -56,10 +57,21 @@ func (gb *GoBuilder) Table(table string) *GoBuilder {
 
 // Select defines the columns to be selected in the query
 func (gb *GoBuilder) Select(columns ...string) *GoBuilder {
+	if gb.tableClause == "" {
+		gb.err = fmt.Errorf("table name is required")
+		return gb
+	}
 	if len(columns) == 0 {
 		columns = append(columns, "*")
 	}
-	gb.selectClause = fmt.Sprintf("SELECT %s FROM %s", strings.Join(columns, ", "), gb.tableClause)
+
+	// Eğer WITH clause varsa (CTE), onu koru
+	withClause := ""
+	if strings.HasPrefix(gb.selectClause, "WITH ") {
+		withClause = gb.selectClause + " "
+	}
+
+	gb.selectClause = fmt.Sprintf("%sSELECT %s FROM %s", withClause, strings.Join(columns, ", "), gb.tableClause)
 	return gb
 }
 
@@ -132,7 +144,17 @@ func (gb *GoBuilder) Delete() *GoBuilder {
 
 // Where adds a WHERE clause with bind parameters
 func (gb *GoBuilder) Where(key, opt string, val any) *GoBuilder {
-	clause := fmt.Sprintf("%s %s %s", key, opt, gb.addParam(val))
+	var clause string
+	switch v := val.(type) {
+	case *GoBuilder:
+		subQuery, subParams := v.Prepare()
+		for _, param := range subParams {
+			gb.addParam(param)
+		}
+		clause = fmt.Sprintf("%s %s (%s)", key, opt, subQuery)
+	default:
+		clause = fmt.Sprintf("%s %s %s", key, opt, gb.addParam(val))
+	}
 	gb.addClause("AND", clause)
 	return gb
 }
@@ -194,6 +216,11 @@ func (gb *GoBuilder) OrIsNotNull(column string) *GoBuilder {
 
 // Having adds a HAVING clause
 func (gb *GoBuilder) Having(condition string, args ...any) *GoBuilder {
+	// Parametreleri ekle
+	for _, arg := range args {
+		condition = strings.Replace(condition, "?", gb.addParam(arg), 1)
+	}
+
 	if gb.havingClause != "" {
 		gb.havingClause = fmt.Sprintf("%s OR %s", gb.havingClause, condition)
 	} else {
@@ -284,16 +311,43 @@ func (gb *GoBuilder) Sql() string {
 
 // Prepare returns the final SQL query and the associated bind parameters
 func (gb *GoBuilder) Prepare() (string, []any) {
-	clauses := []string{
-		gb.selectClause,
-		strings.Join(gb.joinClauses, " "),
-		gb.whereClause,
-		gb.groupByClause,
-		gb.havingClause,
-		gb.orderByClause,
-		gb.limitClause,
-		gb.unionClause,
+	clauses := make([]string, 0)
+
+	// WITH clause'u varsa, onu ilk sıraya ekle
+	if strings.HasPrefix(gb.selectClause, "WITH ") {
+		parts := strings.SplitN(gb.selectClause, " SELECT ", 2)
+		if len(parts) > 1 {
+			clauses = append(clauses, parts[0])
+			gb.selectClause = "SELECT " + parts[1]
+		}
 	}
+
+	// Diğer clause'ları ekle
+	if gb.selectClause != "" {
+		clauses = append(clauses, gb.selectClause)
+	}
+	if len(gb.joinClauses) > 0 {
+		clauses = append(clauses, strings.Join(gb.joinClauses, " "))
+	}
+	if gb.whereClause != "" {
+		clauses = append(clauses, gb.whereClause)
+	}
+	if gb.groupByClause != "" {
+		clauses = append(clauses, gb.groupByClause)
+	}
+	if gb.havingClause != "" {
+		clauses = append(clauses, gb.havingClause)
+	}
+	if gb.orderByClause != "" {
+		clauses = append(clauses, gb.orderByClause)
+	}
+	if gb.limitClause != "" {
+		clauses = append(clauses, gb.limitClause)
+	}
+	if gb.unionClause != "" {
+		clauses = append(clauses, gb.unionClause)
+	}
+
 	query := strings.Join(clauses, " ")
 	re := regexp.MustCompile(`\s+`)
 	query = strings.TrimSpace(re.ReplaceAllString(query, " "))
@@ -310,6 +364,12 @@ func (gb *GoBuilder) reset() {
 // Private method to add parameters
 func (gb *GoBuilder) addParam(value any) string {
 	gb.paramsClause = append(gb.paramsClause, value)
+
+	// MySQL ve SQLite için özel durum
+	if gb.holderClause == MySQL || gb.holderClause == SQLite {
+		return "?"
+	}
+
 	placeholder := fmt.Sprintf("%s%d", gb.holderCode, gb.counterClause)
 	gb.counterClause++
 	return placeholder
@@ -358,16 +418,147 @@ func (gb *GoBuilder) cleanValue(value any) string {
 }
 
 func (gb *GoBuilder) getPlaceholderCode() string {
-	var code string
 	switch gb.holderClause {
 	case Postgres:
-		code = "$"
+		return "$"
 	case SQLServer:
-		code = "@"
+		return "@"
 	case Oracle:
-		code = ":"
-	default: // mysql and sqlite
-		code = "?"
+		return ":"
+	case MySQL:
+		return "?"
+	case SQLite:
+		return "?"
+	default:
+		return "?"
 	}
-	return code
+}
+
+func (gb *GoBuilder) Error() error {
+	return gb.err
+}
+
+// OnDuplicateKeyUpdate adds ON DUPLICATE KEY UPDATE clause (MySQL specific)
+func (gb *GoBuilder) OnDuplicateKeyUpdate(args map[string]any) *GoBuilder {
+	if gb.holderClause != MySQL {
+		gb.err = fmt.Errorf("ON DUPLICATE KEY UPDATE is only supported in MySQL")
+		return gb
+	}
+
+	if len(args) > 0 {
+		keys := make([]string, 0, len(args))
+		for key := range args {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+
+		setClauses := make([]string, 0, len(keys))
+		for _, key := range keys {
+			// MySQL için placeholder'ı doğrudan ? olarak kullan
+			setClauses = append(setClauses, fmt.Sprintf("%s = ?", key))
+			gb.paramsClause = append(gb.paramsClause, args[key])
+		}
+
+		gb.selectClause += fmt.Sprintf(" ON DUPLICATE KEY UPDATE %s", strings.Join(setClauses, ", "))
+	}
+	return gb
+}
+
+// Top adds TOP clause (SQL Server specific)
+func (gb *GoBuilder) Top(n int) *GoBuilder {
+	if gb.holderClause != SQLServer {
+		gb.err = fmt.Errorf("TOP clause is only supported in SQL Server")
+		return gb
+	}
+
+	if gb.selectClause != "" {
+		// TOP kelimesini SELECT ve sütun isimleri arasına ekle
+		gb.selectClause = strings.Replace(gb.selectClause, "SELECT", fmt.Sprintf("SELECT TOP %d", n), 1)
+	}
+	return gb
+}
+
+// Pragma adds PRAGMA statement (SQLite specific)
+func (gb *GoBuilder) Pragma(key string, value string) *GoBuilder {
+	if gb.holderClause != SQLite {
+		gb.err = fmt.Errorf("PRAGMA is only supported in SQLite")
+		return gb
+	}
+
+	gb.selectClause = fmt.Sprintf("PRAGMA %s = %s", key, value)
+	return gb
+}
+
+// With adds WITH clause (CTE - Common Table Expression)
+func (gb *GoBuilder) With(name string, subQuery *GoBuilder) *GoBuilder {
+	// Alt sorguyu hazırla
+	subQueryStr, subParams := subQuery.Prepare()
+
+	// Alt sorgu parametrelerini ana sorguya ekle
+	for _, param := range subParams {
+		gb.addParam(param)
+	}
+
+	// WITH clause'u oluştur
+	gb.selectClause = fmt.Sprintf("WITH %s AS (%s)", name, subQueryStr)
+
+	return gb
+}
+
+// Lock adds FOR UPDATE/SHARE clause
+func (gb *GoBuilder) Lock(lockType string) *GoBuilder {
+	gb.selectClause = fmt.Sprintf("%s %s", gb.selectClause, lockType)
+	return gb
+}
+
+// WhenThen adds conditional clauses
+func (gb *GoBuilder) WhenThen(condition bool, trueCase, falseCase func(*GoBuilder) *GoBuilder) *GoBuilder {
+	if condition {
+		if trueCase != nil {
+			return trueCase(gb)
+		}
+	} else {
+		if falseCase != nil {
+			return falseCase(gb)
+		}
+	}
+	return gb
+}
+
+// CreateBatch adds an INSERT INTO statement for multiple records
+func (gb *GoBuilder) CreateBatch(records []map[string]any) *GoBuilder {
+	if len(records) == 0 {
+		return gb
+	}
+
+	// İlk kayıttan sütun isimlerini al
+	keys := make([]string, 0)
+	for key := range records[0] {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	// Sütun isimleri
+	columns := strings.Join(keys, ", ")
+
+	// Değerler için placeholder'ları oluştur
+	var valueStrings []string
+	for _, record := range records {
+		valuePlaceholders := make([]string, len(keys))
+		for i, key := range keys {
+			if value, ok := record[key]; ok {
+				valuePlaceholders[i] = gb.addParam(value)
+			}
+		}
+		valueStrings = append(valueStrings, fmt.Sprintf("(%s)", strings.Join(valuePlaceholders, ", ")))
+	}
+
+	gb.selectClause = fmt.Sprintf(
+		"INSERT INTO %s (%s) VALUES %s",
+		gb.tableClause,
+		columns,
+		strings.Join(valueStrings, ", "),
+	)
+
+	return gb
 }
