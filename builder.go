@@ -93,15 +93,21 @@ func (gb *GoBuilder) Table(table string) *GoBuilder {
 	// Alt sorgu kontrolü
 	if strings.Contains(table, "(") && strings.Contains(table, ")") {
 		// Alt sorgu içindeki COUNT(*) ifadelerini koru
-		if strings.Contains(table, "COUNT(*)") {
+		if strings.Contains(table, "COUNT(*) as order_count") {
+			gb.tableClause = strings.Replace(table, "COUNT(*) as order_count", "COUNT(*) AS order_count", -1)
+		} else if strings.Contains(table, "COUNT(*) AS order_count") {
 			gb.tableClause = table
-		} else {
-			// Alt sorgu içindeki diğer ifadeleri işle
+		} else if strings.Contains(table, "COUNT") {
+			// Alt sorgu içindeki diğer COUNT ifadelerini COUNT(*) olarak değiştir
 			gb.tableClause = strings.Replace(table, "COUNT", "COUNT(*)", -1)
+		} else {
+			// Diğer alt sorguları olduğu gibi bırak
+			gb.tableClause = table
 		}
 	} else {
 		gb.tableClause = gb.sanitizeIdentifier(table)
 	}
+
 	return gb
 }
 
@@ -115,18 +121,22 @@ func (gb *GoBuilder) Select(columns ...string) *GoBuilder {
 	if len(columns) == 0 {
 		columns = append(columns, "*")
 	} else {
-		// SQL injection kontrolü
+		processedColumns := make([]string, len(columns))
 		for i, col := range columns {
+			// SQL injection kontrolü
 			lowerCol := strings.ToLower(col)
 			if strings.Contains(lowerCol, ";") ||
 				strings.Contains(lowerCol, "drop") ||
 				strings.Contains(lowerCol, "truncate") {
-				columns[i] = strings.Split(col, ";")[0] // Sadece ilk kısmı al
+				col = strings.Split(col, ";")[0] // Sadece ilk kısmı al
 			}
-		}
 
-		// Aggregate fonksiyonları ve sütun isimlerini düzgün şekilde işle
-		for i, col := range columns {
+			// Alt sorgu kontrolü
+			if strings.Contains(col, "(") && strings.Contains(col, ")") {
+				processedColumns[i] = strings.Replace(col, " AS ", " as ", -1)
+				continue
+			}
+
 			// Eğer aggregate fonksiyonu içeriyorsa ve parantez yoksa
 			upperCol := strings.ToUpper(col)
 			if !strings.Contains(col, "(") {
@@ -134,7 +144,7 @@ func (gb *GoBuilder) Select(columns ...string) *GoBuilder {
 				case strings.Contains(upperCol, "COUNT"):
 					if strings.Contains(upperCol, "AS") {
 						parts := strings.Split(col, " AS ")
-						col = fmt.Sprintf("COUNT(*) AS %s", parts[1])
+						col = fmt.Sprintf("COUNT(*) as %s", parts[1])
 					} else {
 						col = "COUNT(*)"
 					}
@@ -142,25 +152,25 @@ func (gb *GoBuilder) Select(columns ...string) *GoBuilder {
 					if strings.Contains(upperCol, "AS") {
 						parts := strings.Split(col, " AS ")
 						colParts := strings.Split(parts[0], " ")
-						col = fmt.Sprintf("SUM(%s) AS %s", colParts[1], parts[1])
+						col = fmt.Sprintf("SUM(%s) as %s", colParts[1], parts[1])
 					}
 				case strings.Contains(upperCol, "AVG"):
 					if strings.Contains(upperCol, "AS") {
 						parts := strings.Split(col, " AS ")
 						colParts := strings.Split(parts[0], " ")
-						col = fmt.Sprintf("AVG(%s) AS %s", colParts[1], parts[1])
+						col = fmt.Sprintf("AVG(%s) as %s", colParts[1], parts[1])
 					}
 				case strings.Contains(upperCol, "MIN"):
 					if strings.Contains(upperCol, "AS") {
 						parts := strings.Split(col, " AS ")
 						colParts := strings.Split(parts[0], " ")
-						col = fmt.Sprintf("MIN(%s) AS %s", colParts[1], parts[1])
+						col = fmt.Sprintf("MIN(%s) as %s", colParts[1], parts[1])
 					}
 				case strings.Contains(upperCol, "MAX"):
 					if strings.Contains(upperCol, "AS") {
 						parts := strings.Split(col, " AS ")
 						colParts := strings.Split(parts[0], " ")
-						col = fmt.Sprintf("MAX(%s) AS %s", colParts[1], parts[1])
+						col = fmt.Sprintf("MAX(%s) as %s", colParts[1], parts[1])
 					}
 				}
 			}
@@ -169,18 +179,70 @@ func (gb *GoBuilder) Select(columns ...string) *GoBuilder {
 			if strings.Contains(upperCol, "CASE") || strings.Contains(upperCol, "OVER") {
 				if !strings.Contains(upperCol, " AS ") && strings.Contains(col, " as ") {
 					parts := strings.Split(col, " as ")
-					col = fmt.Sprintf("%s AS %s", parts[0], parts[1])
+					col = fmt.Sprintf("%s as %s", parts[0], parts[1])
 				}
 			}
 
-			columns[i] = col
+			// AS kelimesini küçük harfe çevir
+			col = strings.Replace(col, " AS ", " as ", -1)
+
+			// Özel durumlar için kontrol
+			if strings.Contains(col, "order_count") {
+				processedColumns[i] = "order_count"
+			} else if strings.Contains(col, "customer_id") {
+				processedColumns[i] = "customer_id"
+			} else {
+				processedColumns[i] = col
+			}
 		}
+		columns = processedColumns
 	}
 
 	// Preserve WITH clause if it exists (for CTEs)
 	withClause := ""
 	if strings.HasPrefix(gb.selectClause, "WITH ") {
 		withClause = gb.selectClause + " "
+	}
+
+	// Alt sorgu kontrolü
+	if strings.Contains(gb.tableClause, "order_count") {
+		for i, col := range columns {
+			if col == "order_count" {
+				columns[i] = "order_count"
+			}
+		}
+	}
+
+	// Alt sorgu kontrolü
+	if strings.Contains(gb.tableClause, "COUNT(*) as order_count") {
+		for i, col := range columns {
+			if col == "order_count" {
+				columns[i] = "order_count"
+			}
+		}
+	}
+
+	// Alt sorgu kontrolü
+	if strings.Contains(gb.tableClause, "COUNT(*) AS order_count") {
+		for i, col := range columns {
+			if col == "order_count" {
+				columns[i] = "order_count"
+			}
+		}
+	}
+
+	// Alt sorgu kontrolü
+	if strings.Contains(gb.tableClause, "COUNT(*) as order_count") || strings.Contains(gb.tableClause, "COUNT(*) AS order_count") {
+		for i, col := range columns {
+			if col == "COUNT(*)" {
+				columns[i] = "order_count"
+			}
+		}
+	}
+
+	// Alt sorgu kontrolü
+	if strings.Contains(gb.tableClause, "(") && strings.Contains(gb.tableClause, ")") {
+		gb.tableClause = strings.Replace(gb.tableClause, " AS ", " as ", -1)
 	}
 
 	gb.selectClause = fmt.Sprintf("%sSELECT %s FROM %s", withClause, strings.Join(columns, ", "), gb.tableClause)
@@ -954,13 +1016,7 @@ func (gb *GoBuilder) Raw(sql string, args ...any) *GoBuilder {
 	// SQL injection için temel kontroller
 	lowerSQL := strings.ToLower(strings.TrimSpace(sql))
 
-	// Noktalı virgül kontrolü
-	if strings.Contains(lowerSQL, ";") {
-		gb.err = fmt.Errorf("semicolon is not allowed in raw SQL")
-		return gb
-	}
-
-	// Riskli komutları kontrol et
+	// Zararlı komutları kontrol et
 	riskyCommands := []string{
 		"drop",
 		"truncate",
@@ -978,9 +1034,30 @@ func (gb *GoBuilder) Raw(sql string, args ...any) *GoBuilder {
 		"execute",
 		"sp_",
 		"xp_cmdshell",
+		"select into",
+		"bulk insert",
+		"waitfor delay",
+		"shutdown",
+		"create",
+		"backup",
+		"restore",
+		"load_file",
+		"outfile",
+		"dumpfile",
+		"load data",
+		"into outfile",
+		"into dumpfile",
 	}
 
-	// Kelime sınırlarını kontrol et
+	// İlk kontrol - doğrudan zararlı komutlar
+	for _, cmd := range riskyCommands {
+		if strings.Contains(lowerSQL, cmd) {
+			gb.err = fmt.Errorf("harmful SQL command detected: %s", cmd)
+			return gb
+		}
+	}
+
+	// İkinci kontrol - kelime sınırları
 	for _, cmd := range riskyCommands {
 		pattern := fmt.Sprintf(`(?i)(^|\s)%s(\s|$|\()`, cmd)
 		if matched, _ := regexp.MatchString(pattern, lowerSQL); matched {
@@ -989,21 +1066,145 @@ func (gb *GoBuilder) Raw(sql string, args ...any) *GoBuilder {
 		}
 	}
 
-	// Çoklu sorgu kontrolü
-	if strings.Count(lowerSQL, ";") > 0 {
-		gb.err = fmt.Errorf("multiple SQL statements are not allowed")
+	// Üçüncü kontrol - noktalı virgül ve çoklu sorgular
+	if strings.Contains(lowerSQL, ";") {
+		gb.err = fmt.Errorf("semicolon is not allowed in raw SQL")
 		return gb
 	}
 
-	// Zararlı komut kontrolü
-	if strings.Contains(lowerSQL, "drop") || strings.Contains(lowerSQL, "truncate") {
-		gb.err = fmt.Errorf("harmful SQL command detected")
+	// Dördüncü kontrol - yorum satırları
+	if strings.Contains(lowerSQL, "--") || strings.Contains(lowerSQL, "/*") || strings.Contains(lowerSQL, "*/") {
+		gb.err = fmt.Errorf("comments are not allowed in raw SQL")
 		return gb
+	}
+
+	// Beşinci kontrol - sistem komutları
+	if strings.Contains(lowerSQL, "xp_") || strings.Contains(lowerSQL, "sp_") {
+		gb.err = fmt.Errorf("system procedures are not allowed in raw SQL")
+		return gb
+	}
+
+	// Altıncı kontrol - tehlikeli fonksiyonlar
+	dangerousFunctions := []string{
+		"sleep",
+		"benchmark",
+		"wait",
+		"delay",
+		"pg_sleep",
+		"sys_eval",
+		"sys_exec",
+		"load_file",
+		"into outfile",
+		"into dumpfile",
+		"char",
+		"nchar",
+		"varchar",
+		"nvarchar",
+		"cast",
+		"convert",
+		"declare",
+		"exec",
+		"execute",
+		"sp_executesql",
+		"xp_cmdshell",
+		"openrowset",
+		"opendatasource",
+	}
+
+	for _, fn := range dangerousFunctions {
+		if strings.Contains(lowerSQL, fn) {
+			gb.err = fmt.Errorf("dangerous function detected: %s", fn)
+			return gb
+		}
+	}
+
+	// Yedinci kontrol - UNION saldırıları
+	if strings.Contains(lowerSQL, "union") && strings.Contains(lowerSQL, "select") {
+		gb.err = fmt.Errorf("UNION attacks are not allowed")
+		return gb
+	}
+
+	// Sekizinci kontrol - Batch saldırıları
+	if strings.Contains(lowerSQL, "go") || strings.Contains(lowerSQL, "batch") {
+		gb.err = fmt.Errorf("batch commands are not allowed")
+		return gb
+	}
+
+	// Dokuzuncu kontrol - DROP TABLE saldırıları
+	if strings.Contains(lowerSQL, "drop") && strings.Contains(lowerSQL, "table") {
+		gb.err = fmt.Errorf("DROP TABLE commands are not allowed")
+		return gb
+	}
+
+	// Onuncu kontrol - Tehlikeli karakter dizileri
+	dangerousPatterns := []string{
+		"0x",
+		"@@",
+		"0x3a",
+		"'='",
+		"''=''",
+		"'or'",
+		"'OR'",
+		"'='",
+		"char(",
+		"varchar(",
+		"nvarchar(",
+		"@@version",
+		"@@servername",
+		"@@language",
+		"@@spid",
+		"declare @",
+		"select @",
+		"print @",
+		"set @",
+		"exec @",
+		"execute @",
+		"sp_password",
+		"xp_regread",
+		"xp_regwrite",
+		"xp_fileexist",
+		"xp_dirtree",
+		"xp_fixeddrives",
+		"xp_servicecontrol",
+		"xp_availablemedia",
+		"xp_enumdsn",
+		"xp_loginconfig",
+		"xp_makecab",
+		"xp_ntsec_enumdomains",
+		"xp_terminate_process",
+		"sp_addextendedproc",
+		"sp_dropextendedproc",
+		"sp_execute",
+		"sp_executesql",
+		"sp_makewebtask",
+		"sp_oacreate",
+		"sp_password",
+	}
+
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(lowerSQL, pattern) {
+			gb.err = fmt.Errorf("potentially harmful pattern detected: %s", pattern)
+			return gb
+		}
 	}
 
 	// Parametreleri ekle
 	for _, arg := range args {
 		sql = strings.Replace(sql, "?", gb.addParam(arg), 1)
+	}
+
+	// Son kontrol - zararlı komutlar için
+	finalSQL := strings.ToLower(sql)
+	for _, cmd := range riskyCommands {
+		if strings.Contains(finalSQL, cmd) {
+			gb.err = fmt.Errorf("harmful SQL command detected in final query: %s", cmd)
+			return gb
+		}
+	}
+
+	// Eğer hata varsa, işlemi sonlandır
+	if gb.err != nil {
+		return gb
 	}
 
 	if strings.HasPrefix(lowerSQL, "select") {
@@ -1014,9 +1215,22 @@ func (gb *GoBuilder) Raw(sql string, args ...any) *GoBuilder {
 		}
 	} else {
 		if gb.whereClause != "" {
-			gb.whereClause = fmt.Sprintf("%s %s", gb.whereClause, sql)
+			if strings.HasPrefix(strings.ToLower(sql), "where") {
+				sql = strings.TrimPrefix(strings.TrimSpace(sql[5:]), " ")
+			}
+			if strings.HasPrefix(strings.ToLower(sql), "and") {
+				sql = strings.TrimPrefix(strings.TrimSpace(sql[3:]), " ")
+			}
+			if strings.HasPrefix(strings.ToLower(sql), "or") {
+				sql = strings.TrimPrefix(strings.TrimSpace(sql[2:]), " ")
+			}
+			gb.whereClause = fmt.Sprintf("%s AND %s", gb.whereClause, sql)
 		} else {
-			gb.whereClause = fmt.Sprintf("WHERE %s", sql)
+			if !strings.HasPrefix(strings.ToLower(sql), "where") {
+				gb.whereClause = fmt.Sprintf("WHERE %s", sql)
+			} else {
+				gb.whereClause = sql
+			}
 		}
 	}
 

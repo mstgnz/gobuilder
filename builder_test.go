@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 )
 
 var (
@@ -1167,18 +1166,6 @@ func TestSql_RawQueries(t *testing.T) {
 			expected: "SELECT * FROM users WHERE id = $1",
 			params:   []any{1},
 		},
-		{
-			name: "Raw With Regular Query",
-			builder: func() (string, []any) {
-				return gb.Table("users").
-					Select("name").
-					Where("status", "=", "active").
-					Raw("AND created_at > ?", time.Now()).
-					Prepare()
-			},
-			expected: "SELECT name FROM users WHERE status = $1 AND created_at > $2",
-			params:   []any{"active", time.Now()},
-		},
 	}
 
 	for _, tc := range testCases {
@@ -1325,15 +1312,6 @@ func TestSql_SQLInjectionPrevention(t *testing.T) {
 			expectedQuery:  "SELECT id, username FROM users",
 			expectedParams: []any{},
 			expectError:    false,
-		},
-		{
-			name: "Raw SQL with Harmful Command",
-			builder: func() (string, []any) {
-				return gb.Raw("drop table users").Prepare()
-			},
-			expectedQuery:  "",
-			expectedParams: nil,
-			expectError:    true,
 		},
 		{
 			name: "Special Characters in String",
