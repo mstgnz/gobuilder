@@ -2,6 +2,7 @@ package gobuilder
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -546,9 +547,88 @@ func TestSql_OrderByDescMultiple(t *testing.T) {
 }
 
 func TestSql_Union(t *testing.T) {
-	queryExpected = "UNION select * from companies"
-	paramsExpected := []any{}
-	query, params = gb.Union("select * from companies").Prepare()
+	// Test basic UNION
+	query1 := gb.Table("users").
+		Select("name", "email").
+		Where("type", "=", "customer")
+
+	query2 := NewGoBuilder(Postgres).
+		Table("companies").
+		Select("company_name", "company_email").
+		Where("status", "=", "active")
+
+	query, params = query1.Union(query2).Prepare()
+	queryExpected := "SELECT name, email FROM users WHERE type = $1 UNION SELECT company_name, company_email FROM companies WHERE status = $2"
+	paramsExpected := []any{"customer", "active"}
+
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
+	}
+
+	// Test UNION ALL
+	query1 = gb.Table("sales").
+		Select("date", "amount").
+		Where("year", "=", 2023)
+
+	query2 = NewGoBuilder(Postgres).
+		Table("purchases").
+		Select("date", "amount").
+		Where("year", "=", 2023)
+
+	query, params = query1.UnionAll(query2).Prepare()
+	queryExpected = "SELECT date, amount FROM sales WHERE year = $1 UNION ALL SELECT date, amount FROM purchases WHERE year = $2"
+	paramsExpected = []any{2023, 2023}
+
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
+	}
+
+	// Test UNION with ORDER BY
+	query1 = gb.Table("employees").
+		Select("id", "salary").
+		Where("department", "=", "IT")
+
+	query2 = NewGoBuilder(Postgres).
+		Table("contractors").
+		Select("id", "rate as salary").
+		Where("status", "=", "active")
+
+	query, params = query1.Union(query2).OrderBy("salary").Prepare()
+	queryExpected = "SELECT id, salary FROM employees WHERE department = $1 UNION SELECT id, rate as salary FROM contractors WHERE status = $2 ORDER BY salary ASC"
+	paramsExpected = []any{"IT", "active"}
+
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
+	}
+
+	// Test multiple UNIONs
+	query1 = gb.Table("full_time").
+		Select("id", "name", "'full_time' as type").
+		Where("active", "=", true)
+
+	query2 = NewGoBuilder(Postgres).
+		Table("part_time").
+		Select("id", "name", "'part_time' as type").
+		Where("active", "=", true)
+
+	query3 := NewGoBuilder(Postgres).
+		Table("contractors").
+		Select("id", "name", "'contractor' as type").
+		Where("active", "=", true)
+
+	query, params = query1.Union(query2).Union(query3).OrderBy("type").Prepare()
+	queryExpected = "SELECT id, name, 'full_time' as type FROM full_time WHERE active = $1 UNION SELECT id, name, 'part_time' as type FROM part_time WHERE active = $2 UNION SELECT id, name, 'contractor' as type FROM contractors WHERE active = $3 ORDER BY type ASC"
+	paramsExpected = []any{true, true, true}
+
 	if !reflect.DeepEqual(queryExpected, query) {
 		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
 	}
@@ -1205,4 +1285,135 @@ func TestSql_IncrementDecrement(t *testing.T) {
 	}
 }
 
-// ... existing code ...
+func TestSql_SQLInjectionPrevention(t *testing.T) {
+	testCases := []struct {
+		name           string
+		builder        func() (string, []any)
+		expectedQuery  string
+		expectedParams []any
+		expectError    bool
+	}{
+		{
+			name: "String with SQL Injection Attempt",
+			builder: func() (string, []any) {
+				return gb.Table("users").
+					Where("username", "=", "admin' OR '1'='1").
+					Prepare()
+			},
+			expectedQuery:  "SELECT * FROM users WHERE username = $1",
+			expectedParams: []any{"admin' OR '1'='1"},
+			expectError:    false,
+		},
+		{
+			name: "Table Name with SQL Injection Attempt",
+			builder: func() (string, []any) {
+				return gb.Table("users; DROP TABLE users;").
+					Select().
+					Prepare()
+			},
+			expectedQuery:  "SELECT * FROM users",
+			expectedParams: []any{},
+			expectError:    false,
+		},
+		{
+			name: "Column Name with SQL Injection Attempt",
+			builder: func() (string, []any) {
+				return gb.Table("users").
+					Select("id", "username; DROP TABLE users;").
+					Prepare()
+			},
+			expectedQuery:  "SELECT id, username FROM users",
+			expectedParams: []any{},
+			expectError:    false,
+		},
+		{
+			name: "Raw SQL with Harmful Command",
+			builder: func() (string, []any) {
+				return gb.Raw("drop table users").Prepare()
+			},
+			expectedQuery:  "",
+			expectedParams: nil,
+			expectError:    true,
+		},
+		{
+			name: "Special Characters in String",
+			builder: func() (string, []any) {
+				return gb.Table("users").
+					Where("name", "=", "O'Reilly\\McDonalds").
+					Prepare()
+			},
+			expectedQuery:  "SELECT * FROM users WHERE name = $1",
+			expectedParams: []any{"O'Reilly\\McDonalds"},
+			expectError:    false,
+		},
+		{
+			name: "Comment Injection Attempt",
+			builder: func() (string, []any) {
+				return gb.Table("users").
+					Where("username", "=", "admin'--").
+					Prepare()
+			},
+			expectedQuery:  "SELECT * FROM users WHERE username = $1",
+			expectedParams: []any{"admin'--"},
+			expectError:    false,
+		},
+		{
+			name: "UNION Injection Attempt",
+			builder: func() (string, []any) {
+				return gb.Table("users").
+					Where("id", "=", "1 UNION SELECT * FROM passwords").
+					Prepare()
+			},
+			expectedQuery:  "SELECT * FROM users WHERE id = $1",
+			expectedParams: []any{"1 UNION SELECT * FROM passwords"},
+			expectError:    false,
+		},
+		{
+			name: "Batch Command Injection",
+			builder: func() (string, []any) {
+				return gb.Table("users").
+					Where("id", "=", "1; UPDATE users SET admin=1;").
+					Prepare()
+			},
+			expectedQuery:  "SELECT * FROM users WHERE id = $1",
+			expectedParams: []any{"1; UPDATE users SET admin=1;"},
+			expectError:    false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			gb = NewGoBuilder(Postgres) // Reset for each test
+			query, params := tc.builder()
+
+			if tc.expectError {
+				if gb.Error() == nil {
+					t.Error("Expected an error but got none")
+				}
+				return
+			}
+
+			if gb.Error() != nil {
+				t.Errorf("Unexpected error: %v", gb.Error())
+				return
+			}
+
+			if query != tc.expectedQuery {
+				t.Errorf("Expected query %q, got %q", tc.expectedQuery, query)
+			}
+
+			if !reflect.DeepEqual(params, tc.expectedParams) {
+				t.Errorf("Expected params %v, got %v", tc.expectedParams, params)
+			}
+
+			// Test Sql() output for SQL injection
+			sqlOutput := gb.Table("users").
+				Where("username", "=", "admin' OR '1'='1").
+				Sql()
+
+			if strings.Contains(sqlOutput, "OR '1'='1") {
+				t.Error("SQL injection possible in Sql() output")
+			}
+		})
+	}
+}
