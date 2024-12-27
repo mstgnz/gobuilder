@@ -1395,3 +1395,46 @@ func TestSql_SQLInjectionPrevention(t *testing.T) {
 		})
 	}
 }
+
+func TestSql_ComplexConditions(t *testing.T) {
+	age := 30
+	name := "John"
+
+	queryExpected := "SELECT * FROM users WHERE age > $1 AND name = $2"
+	paramsExpected := []any{30, "John"}
+
+	query, params := gb.Table("users").Select().WhenThen(age > 0, func(b *GoBuilder) *GoBuilder { return b.Where("age", ">", age) }, nil).WhenThen(name != "", func(b *GoBuilder) *GoBuilder { return b.Where("name", "=", name) }, nil).Prepare()
+
+	if !reflect.DeepEqual(queryExpected, query) {
+		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	}
+	if !reflect.DeepEqual(paramsExpected, params) {
+		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
+	}
+}
+
+func BenchmarkSql_Select(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		gb.Table("users").Select().Where("id", "=", i).Sql()
+	}
+}
+
+func BenchmarkSql_Insert(b *testing.B) {
+	args := map[string]any{"firstname": "John", "lastname": "Doe"}
+	for i := 0; i < b.N; i++ {
+		gb.Table("users").Create(args).Sql()
+	}
+}
+
+func BenchmarkSql_Update(b *testing.B) {
+	args := map[string]any{"firstname": "Jane"}
+	for i := 0; i < b.N; i++ {
+		gb.Table("users").Update(args).Where("id", "=", i).Sql()
+	}
+}
+
+func BenchmarkSql_Delete(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		gb.Table("users").Delete().Where("id", "=", i).Sql()
+	}
+}
