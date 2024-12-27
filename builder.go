@@ -148,12 +148,15 @@ func (gb *GoBuilder) Where(key, opt string, val any) *GoBuilder {
 	switch v := val.(type) {
 	case *GoBuilder:
 		subQuery, subParams := v.Prepare()
-		for _, param := range subParams {
-			gb.addParam(param)
-		}
+		gb.paramsClause = append(gb.paramsClause, subParams...)
 		clause = fmt.Sprintf("%s %s (%s)", key, opt, subQuery)
 	default:
-		clause = fmt.Sprintf("%s %s %s", key, opt, gb.addParam(val))
+		if str, ok := val.(string); ok && strings.Contains(str, ".") {
+			// Eğer parametre bir tablo referansı ise (örn: users.id), parametre olarak ekleme
+			clause = fmt.Sprintf("%s %s %s", key, opt, str)
+		} else {
+			clause = fmt.Sprintf("%s %s %s", key, opt, gb.addParam(val))
+		}
 	}
 	gb.addClause("AND", clause)
 	return gb
@@ -495,9 +498,7 @@ func (gb *GoBuilder) With(name string, subQuery *GoBuilder) *GoBuilder {
 	subQueryStr, subParams := subQuery.Prepare()
 
 	// Alt sorgu parametrelerini ana sorguya ekle
-	for _, param := range subParams {
-		gb.addParam(param)
-	}
+	gb.paramsClause = append(gb.paramsClause, subParams...)
 
 	// WITH clause'u oluştur
 	gb.selectClause = fmt.Sprintf("WITH %s AS (%s)", name, subQueryStr)
@@ -561,4 +562,158 @@ func (gb *GoBuilder) CreateBatch(records []map[string]any) *GoBuilder {
 	)
 
 	return gb
+}
+
+// Raw adds a raw SQL clause to the query
+func (gb *GoBuilder) Raw(sql string, args ...any) *GoBuilder {
+	// Parametreleri ekle
+	for _, arg := range args {
+		sql = strings.Replace(sql, "?", gb.addParam(arg), 1)
+	}
+	if strings.HasPrefix(sql, "SELECT") || strings.HasPrefix(sql, "UPDATE") || strings.HasPrefix(sql, "DELETE") {
+		gb.selectClause = sql
+	} else {
+		if gb.whereClause != "" {
+			gb.whereClause = fmt.Sprintf("%s %s", gb.whereClause, sql)
+		} else {
+			gb.whereClause = fmt.Sprintf("WHERE %s", sql)
+		}
+	}
+	return gb
+}
+
+// Increment adds an increment operation to the query
+func (gb *GoBuilder) Increment(column string, amount int) *GoBuilder {
+	gb.selectClause = fmt.Sprintf("UPDATE %s SET %s = %s + %d", gb.tableClause, column, column, amount)
+	return gb
+}
+
+// Decrement adds a decrement operation to the query
+func (gb *GoBuilder) Decrement(column string, amount int) *GoBuilder {
+	gb.selectClause = fmt.Sprintf("UPDATE %s SET %s = %s - %d", gb.tableClause, column, column, amount)
+	return gb
+}
+
+// WhereExists adds a WHERE EXISTS clause
+func (gb *GoBuilder) WhereExists(subQuery *GoBuilder) *GoBuilder {
+	subQueryStr, subParams := subQuery.Prepare()
+	// Alt sorgu parametrelerini ana sorguya ekle
+	gb.paramsClause = append(gb.paramsClause, subParams...)
+	clause := fmt.Sprintf("EXISTS (%s)", subQueryStr)
+	gb.addClause("AND", clause)
+	return gb
+}
+
+// WhereNotExists adds a WHERE NOT EXISTS clause
+func (gb *GoBuilder) WhereNotExists(subQuery *GoBuilder) *GoBuilder {
+	subQueryStr, subParams := subQuery.Prepare()
+	// Alt sorgu parametrelerini ana sorguya ekle
+	gb.paramsClause = append(gb.paramsClause, subParams...)
+	clause := fmt.Sprintf("NOT EXISTS (%s)", subQueryStr)
+	gb.addClause("AND", clause)
+	return gb
+}
+
+// WhereJsonContains adds a WHERE JSON_CONTAINS clause
+func (gb *GoBuilder) WhereJsonContains(column string, value any) *GoBuilder {
+	switch gb.holderClause {
+	case Postgres:
+		gb.addClause("AND", fmt.Sprintf("%s @> %s", column, gb.addParam(value)))
+	case MySQL:
+		gb.addClause("AND", fmt.Sprintf("JSON_CONTAINS(%s, %s)", column, gb.addParam(value)))
+	default:
+		gb.err = fmt.Errorf("JSON operations are only supported in PostgreSQL and MySQL")
+	}
+	return gb
+}
+
+// CrossJoin adds a CROSS JOIN clause
+func (gb *GoBuilder) CrossJoin(table string) *GoBuilder {
+	join := fmt.Sprintf("CROSS JOIN %s", table)
+	gb.joinClauses = append(gb.joinClauses, join)
+	return gb
+}
+
+// FullOuterJoin adds a FULL OUTER JOIN clause
+func (gb *GoBuilder) FullOuterJoin(table, first, operator, last string) *GoBuilder {
+	join := fmt.Sprintf("FULL OUTER JOIN %s ON %s %s %s", table, first, operator, last)
+	gb.joinClauses = append(gb.joinClauses, join)
+	return gb
+}
+
+// WhereColumn adds a WHERE column comparison
+func (gb *GoBuilder) WhereColumn(column1, operator, column2 string) *GoBuilder {
+	gb.addClause("AND", fmt.Sprintf("%s %s %s", column1, operator, column2))
+	return gb
+}
+
+// WhereDate adds a WHERE date comparison
+func (gb *GoBuilder) WhereDate(column, operator string, value time.Time) *GoBuilder {
+	switch gb.holderClause {
+	case Postgres:
+		gb.addClause("AND", fmt.Sprintf("DATE(%s) %s %s", column, operator, gb.addParam(value.Format("2006-01-02"))))
+	case MySQL:
+		gb.addClause("AND", fmt.Sprintf("DATE(%s) %s %s", column, operator, gb.addParam(value.Format("2006-01-02"))))
+	default:
+		gb.addClause("AND", fmt.Sprintf("DATE(%s) %s %s", column, operator, gb.addParam(value.Format("2006-01-02"))))
+	}
+	return gb
+}
+
+// WhereYear adds a WHERE year comparison
+func (gb *GoBuilder) WhereYear(column, operator string, year int) *GoBuilder {
+	switch gb.holderClause {
+	case Postgres:
+		gb.addClause("AND", fmt.Sprintf("EXTRACT(YEAR FROM %s) %s %s", column, operator, gb.addParam(year)))
+	case MySQL:
+		gb.addClause("AND", fmt.Sprintf("YEAR(%s) %s %s", column, operator, gb.addParam(year)))
+	default:
+		gb.addClause("AND", fmt.Sprintf("YEAR(%s) %s %s", column, operator, gb.addParam(year)))
+	}
+	return gb
+}
+
+// WhereMonth adds a WHERE month comparison
+func (gb *GoBuilder) WhereMonth(column, operator string, month int) *GoBuilder {
+	switch gb.holderClause {
+	case Postgres:
+		gb.addClause("AND", fmt.Sprintf("EXTRACT(MONTH FROM %s) %s %s", column, operator, gb.addParam(month)))
+	case MySQL:
+		gb.addClause("AND", fmt.Sprintf("MONTH(%s) %s %s", column, operator, gb.addParam(month)))
+	default:
+		gb.addClause("AND", fmt.Sprintf("MONTH(%s) %s %s", column, operator, gb.addParam(month)))
+	}
+	return gb
+}
+
+// Chunk processes results in chunks
+func (gb *GoBuilder) Chunk(size int, callback func([]map[string]any) error) error {
+	offset := 0
+	query := gb.Clone()
+	query.Limit(offset, size)
+	// Bu noktada gerçek veritabanı bağlantısı ve sorgu çalıştırma işlemi gerekiyor
+	// Şu an için sadece interface'i tanımlıyoruz
+	return nil
+}
+
+// Clone creates a copy of the current builder
+func (gb *GoBuilder) Clone() *GoBuilder {
+	clone := &GoBuilder{
+		tableClause:   gb.tableClause,
+		selectClause:  gb.selectClause,
+		whereClause:   gb.whereClause,
+		groupByClause: gb.groupByClause,
+		havingClause:  gb.havingClause,
+		orderByClause: gb.orderByClause,
+		limitClause:   gb.limitClause,
+		unionClause:   gb.unionClause,
+		joinClauses:   make([]string, len(gb.joinClauses)),
+		paramsClause:  make([]any, len(gb.paramsClause)),
+		counterClause: gb.counterClause,
+		holderClause:  gb.holderClause,
+		holderCode:    gb.holderCode,
+	}
+	copy(clone.joinClauses, gb.joinClauses)
+	copy(clone.paramsClause, gb.paramsClause)
+	return clone
 }

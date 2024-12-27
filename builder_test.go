@@ -3,6 +3,7 @@ package gobuilder
 import (
 	"reflect"
 	"testing"
+	"time"
 )
 
 var (
@@ -585,16 +586,56 @@ func TestSql_ErrorHandling(t *testing.T) {
 }
 
 func TestSql_JsonOperations(t *testing.T) {
-	queryExpected := "SELECT * FROM users WHERE data->>'name' = $1"
-	paramsExpected := []any{"John"}
-
-	query, params := gb.Table("users").Select().Where("data->>'name'", "=", "John").Prepare()
-
-	if !reflect.DeepEqual(queryExpected, query) {
-		t.Errorf("queryExpected = %v, query %v", queryExpected, query)
+	testCases := []struct {
+		name     string
+		builder  func() (string, []any)
+		expected string
+		params   []any
+	}{
+		{
+			name: "Simple JSON Path",
+			builder: func() (string, []any) {
+				return gb.Table("users").Select().Where("data->>'name'", "=", "John").Prepare()
+			},
+			expected: "SELECT * FROM users WHERE data->>'name' = $1",
+			params:   []any{"John"},
+		},
+		{
+			name: "PostgreSQL JSON Contains",
+			builder: func() (string, []any) {
+				gb := NewGoBuilder(Postgres)
+				return gb.Table("users").
+					Select("name").
+					WhereJsonContains("preferences", `{"theme": "dark"}`).
+					Prepare()
+			},
+			expected: "SELECT name FROM users WHERE preferences @> $1",
+			params:   []any{`{"theme": "dark"}`},
+		},
+		{
+			name: "MySQL JSON Contains",
+			builder: func() (string, []any) {
+				gb := NewGoBuilder(MySQL)
+				return gb.Table("users").
+					Select("name").
+					WhereJsonContains("preferences", `{"theme": "dark"}`).
+					Prepare()
+			},
+			expected: "SELECT name FROM users WHERE JSON_CONTAINS(preferences, ?)",
+			params:   []any{`{"theme": "dark"}`},
+		},
 	}
-	if !reflect.DeepEqual(paramsExpected, params) {
-		t.Errorf("paramsExpected = %v, params %v", paramsExpected, params)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			query, params := tc.builder()
+			if query != tc.expected {
+				t.Errorf("expected query %v, got %v", tc.expected, query)
+			}
+			if !reflect.DeepEqual(params, tc.params) {
+				t.Errorf("expected params %v, got %v", tc.params, params)
+			}
+		})
 	}
 }
 
@@ -1030,3 +1071,138 @@ func TestSql_CaseExpressions(t *testing.T) {
 		})
 	}
 }
+
+func TestSql_RawQueries(t *testing.T) {
+	testCases := []struct {
+		name     string
+		builder  func() (string, []any)
+		expected string
+		params   []any
+	}{
+		{
+			name: "Raw Select",
+			builder: func() (string, []any) {
+				return gb.Raw("SELECT * FROM users WHERE id = ?", 1).Prepare()
+			},
+			expected: "SELECT * FROM users WHERE id = $1",
+			params:   []any{1},
+		},
+		{
+			name: "Raw With Regular Query",
+			builder: func() (string, []any) {
+				return gb.Table("users").
+					Select("name").
+					Where("status", "=", "active").
+					Raw("AND created_at > ?", time.Now()).
+					Prepare()
+			},
+			expected: "SELECT name FROM users WHERE status = $1 AND created_at > $2",
+			params:   []any{"active", time.Now()},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			query, params := tc.builder()
+			if query != tc.expected {
+				t.Errorf("expected query %v, got %v", tc.expected, query)
+			}
+			if len(params) != len(tc.params) {
+				t.Errorf("expected params length %v, got %v", len(tc.params), len(params))
+			}
+		})
+	}
+}
+
+func TestSql_ExistsQueries(t *testing.T) {
+	testCases := []struct {
+		name     string
+		builder  func() (string, []any)
+		expected string
+		params   []any
+	}{
+		{
+			name: "Where Exists",
+			builder: func() (string, []any) {
+				subQuery := NewGoBuilder(Postgres).
+					Table("orders").
+					Select("1").
+					Where("orders.user_id", "=", "users.id").
+					Where("total", ">", 1000)
+				return gb.Table("users").
+					Select("name").
+					WhereExists(subQuery).
+					Prepare()
+			},
+			expected: "SELECT name FROM users WHERE EXISTS (SELECT 1 FROM orders WHERE orders.user_id = users.id AND total > $1)",
+			params:   []any{1000},
+		},
+		{
+			name: "Where Not Exists",
+			builder: func() (string, []any) {
+				subQuery := NewGoBuilder(Postgres).
+					Table("orders").
+					Select("1").
+					Where("orders.user_id", "=", "users.id")
+				return gb.Table("users").
+					Select("name").
+					WhereNotExists(subQuery).
+					Prepare()
+			},
+			expected: "SELECT name FROM users WHERE NOT EXISTS (SELECT 1 FROM orders WHERE orders.user_id = users.id)",
+			params:   []any{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			query, params := tc.builder()
+			if query != tc.expected {
+				t.Errorf("expected query %v, got %v", tc.expected, query)
+			}
+			if !reflect.DeepEqual(params, tc.params) {
+				t.Errorf("expected params %v, got %v", tc.params, params)
+			}
+		})
+	}
+}
+
+func TestSql_IncrementDecrement(t *testing.T) {
+	testCases := []struct {
+		name     string
+		builder  func() (string, []any)
+		expected string
+		params   []any
+	}{
+		{
+			name: "Increment",
+			builder: func() (string, []any) {
+				return gb.Table("users").Increment("votes", 1).Prepare()
+			},
+			expected: "UPDATE users SET votes = votes + 1",
+			params:   []any{},
+		},
+		{
+			name: "Decrement",
+			builder: func() (string, []any) {
+				return gb.Table("products").Decrement("stock", 5).Prepare()
+			},
+			expected: "UPDATE products SET stock = stock - 5",
+			params:   []any{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			query, params := tc.builder()
+			if query != tc.expected {
+				t.Errorf("expected query %v, got %v", tc.expected, query)
+			}
+			if !reflect.DeepEqual(params, tc.params) {
+				t.Errorf("expected params %v, got %v", tc.params, params)
+			}
+		})
+	}
+}
+
+// ... existing code ...
